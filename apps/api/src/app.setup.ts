@@ -5,5 +5,13 @@ import { ApiExceptionFilter } from './common/api-exception.filter.js';
 export function configureApp(app: INestApplication): void {
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new ApiExceptionFilter());
-  app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173' });
+  app.enableCors({ origin: allowedOrigins() });
+}
+
+/** WEB_ORIGIN may list several comma-separated origins (e.g. two web domains). */
+function allowedOrigins(): string[] {
+  return (process.env.WEB_ORIGIN ?? 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 }
