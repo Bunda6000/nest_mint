@@ -1,0 +1,10 @@
+// Database schema. Models are added from NM-2 onward (see Notion: 04 · Application Design).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
