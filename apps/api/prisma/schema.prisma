@@ -1,10 +1,26 @@
-// Database schema. Models are added from NM-2 onward (see Notion: 04 · Application Design).
+// Database schema. See Notion: 04 · Application Design.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id              String   @id @default(uuid()) @db.Uuid
+  email           String   @unique
+  passwordHash    String   @map("password_hash")
+  displayName     String?  @map("display_name")
+  baseCurrency    String   @default("MKD") @map("base_currency") @db.Char(3)
+  displayCurrency String   @default("EUR") @map("display_currency") @db.Char(3)
+  locale          String   @default("en")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
 }

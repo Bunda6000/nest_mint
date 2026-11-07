@@ -8,6 +8,22 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: nestmint
+          POSTGRES_PASSWORD: nestmint
+          POSTGRES_DB: nestmint
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nestmint"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://nestmint:nestmint@localhost:5432/nestmint
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -16,6 +32,7 @@ jobs:
           node-version-file: .nvmrc
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter @nestmint/api prisma:generate
+      - run: pnpm --filter @nestmint/api prisma:deploy
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
