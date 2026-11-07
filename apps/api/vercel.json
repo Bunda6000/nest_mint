@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nestjs",
-  "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter @nestmint/shared build && pnpm prisma:generate && pnpm prisma:deploy"
+  "installCommand": "npx --yes pnpm@9.15.9 install --no-frozen-lockfile",
+  "buildCommand": "npx --yes pnpm@9.15.9 --filter @nestmint/shared build && npx --yes pnpm@9.15.9 prisma:generate && npx --yes pnpm@9.15.9 prisma:deploy"
 }
