@@ -75,4 +75,7 @@ export class E2eHarness {
       .set('Authorization', `Bearer ${user.token}`)
       .send(body as object);
   }
+  delete(path: string, user: E2eUser) {
+    return this.http().delete(`/api/v1${path}`).set('Authorization', `Bearer ${user.token}`);
+  }
 }
