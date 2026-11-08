@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { ApiError, apiGet, apiPost } from '../../api/client';
+import { ApiError, apiGet, apiPost, apiSend } from '../../api/client';
 
 type AuthState =
   | { status: 'loading' }
@@ -24,6 +24,8 @@ interface AuthContextValue {
    * the refresh cookie and the request is retried once; if that fails the user is logged out.
    */
   authedGet: <T>(path: string) => Promise<T>;
+  /** Like authedGet, for changes. The body is sent as JSON; a 204 answer gives back null. */
+  authedSend: <T>(method: 'POST' | 'PATCH' | 'PUT', path: string, body?: unknown) => Promise<T>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -82,10 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const accessToken = state.status === 'authenticated' ? state.accessToken : undefined;
-  const authedGet = useCallback(
-    async <T,>(path: string): Promise<T> => {
+  // A 401 means the server refused the request before doing anything, so retrying a change once
+  // with a renewed token cannot apply it twice.
+  const authed = useCallback(
+    async <T,>(call: (token: string | undefined) => Promise<T>): Promise<T> => {
       try {
-        return await apiGet<T>(path, accessToken);
+        return await call(accessToken);
       } catch (error) {
         if (!(error instanceof ApiError) || error.status !== 401) throw error;
         const renewed = await restoreSession().catch(() => null);
@@ -94,15 +98,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw error;
         }
         setState(toAuthenticated(renewed));
-        return apiGet<T>(path, renewed.accessToken);
+        return call(renewed.accessToken);
       }
     },
     [accessToken],
   );
 
+  const authedGet = useCallback(
+    <T,>(path: string): Promise<T> => authed((token) => apiGet<T>(path, token)),
+    [authed],
+  );
+
+  const authedSend = useCallback(
+    <T,>(method: 'POST' | 'PATCH' | 'PUT', path: string, body?: unknown): Promise<T> =>
+      authed((token) => apiSend<T>(method, path, body, token)),
+    [authed],
+  );
+
   const value = useMemo(
-    () => ({ state, login, logout, authedGet }),
-    [state, login, logout, authedGet],
+    () => ({ state, login, logout, authedGet, authedSend }),
+    [state, login, logout, authedGet, authedSend],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

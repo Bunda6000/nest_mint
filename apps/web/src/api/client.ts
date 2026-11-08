@@ -21,11 +21,9 @@ interface RequestOptions {
   token?: string;
 }
 
-async function request<T>(
-  method: 'GET' | 'POST',
-  path: string,
-  options: RequestOptions,
-): Promise<T> {
+export type ApiMethod = 'GET' | 'POST' | 'PATCH' | 'PUT';
+
+async function request<T>(method: ApiMethod, path: string, options: RequestOptions): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
@@ -60,6 +58,15 @@ export function apiGet<T>(path: string, token?: string): Promise<T> {
   return request<T>('GET', path, token ? { token } : {});
 }
 
+export function apiSend<T>(
+  method: 'POST' | 'PATCH' | 'PUT',
+  path: string,
+  body: unknown = {},
+  token?: string,
+): Promise<T> {
+  return request<T>(method, path, token ? { body, token } : { body });
+}
+
 export function apiPost<T>(path: string, body: unknown = {}, token?: string): Promise<T> {
-  return request<T>('POST', path, token ? { body, token } : { body });
+  return apiSend<T>('POST', path, body, token);
 }
