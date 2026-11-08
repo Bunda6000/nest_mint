@@ -27,6 +27,7 @@ model User {
   refreshTokens  RefreshToken[]
   categoryGroups CategoryGroup[]
   categories     Category[]
+  transactions   Transaction[]
 
   @@map("users")
 }
@@ -81,7 +82,32 @@ model Category {
   user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   group CategoryGroup @relation(fields: [groupId, userId], references: [id, userId], onDelete: Cascade)
 
+  transactions Transaction[]
+
   @@unique([groupId, name])
+  /// Lets transactions reference (category, owner) together, so a transaction can never use another user's category.
+  @@unique([id, userId])
   @@index([userId])
   @@map("categories")
+}
+
+/// Money that moved. For now only expenses; amounts are whole denars (see docs/adr/008-money-and-exchange-rates.md).
+model Transaction {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+  /// Whole denars, always above 0 (checked in the database as well).
+  amountMkd  Int      @map("amount_mkd")
+  /// The calendar day the money was spent, no time of day.
+  occurredOn DateTime @map("occurred_on") @db.Date
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// NoAction: a category in use cannot be deleted; deleting the whole user still works because both cascade.
+  category Category @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+
+  @@index([userId, occurredOn(sort: Desc)])
+  @@map("transactions")
 }

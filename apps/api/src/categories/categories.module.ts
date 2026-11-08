@@ -12,5 +12,7 @@ import { PrismaCategoriesRepository } from './prisma-categories.repository.js';
     CategoriesService,
     { provide: CATEGORIES_REPOSITORY, useClass: PrismaCategoriesRepository },
   ],
+  // Other features check that a category exists, is the user's and is not archived.
+  exports: [CATEGORIES_REPOSITORY],
 })
 export class CategoriesModule {}
