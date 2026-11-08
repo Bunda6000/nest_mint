@@ -148,3 +148,187 @@ describe('listRecent', () => {
     expect((await service.listRecent(A, Number.NaN)).transactions).toHaveLength(10);
   });
 });
+
+describe('kind', () => {
+  it('is an expense unless a cash withdrawal is asked for', async () => {
+    expect((await service.createExpense(A, expense('Groceries', 10))).kind).toBe('expense');
+    const withdrawal = await service.createExpense(A, {
+      ...expense('Cash withdrawal', 5000),
+      kind: 'cash_withdrawal',
+    });
+    expect(withdrawal.kind).toBe('cash_withdrawal');
+    expect((await service.listRecent(A)).transactions.map((t) => t.kind)).toEqual([
+      'cash_withdrawal',
+      'expense',
+    ]);
+  });
+});
+
+describe('listMonth', () => {
+  beforeEach(async () => {
+    for (const [name, amount, day] of [
+      ['Groceries', 1, '2025-10-31'],
+      ['Groceries', 20, '2025-11-01'],
+      ['Restaurants', 300, '2025-11-15'],
+      ['Groceries', 4000, '2025-11-30'],
+      ['Groceries', 50000, '2025-12-01'],
+    ] as const) {
+      await service.createExpense(A, expense(name, amount, day));
+    }
+  });
+
+  it('holds exactly the calendar month, first and last day included, newest first', async () => {
+    const result = await service.listMonth(A, '2025-11');
+    expect(result.month).toBe('2025-11');
+    expect(result.transactions.map((t) => t.amountMkd)).toEqual([4000, 300, 20]);
+    expect(result.totalMkd).toBe(4320);
+  });
+
+  it('narrows the list and the total to one category', async () => {
+    const result = await service.listMonth(A, '2025-11', categoryId('Groceries'));
+    expect(result.transactions.map((t) => t.amountMkd)).toEqual([4000, 20]);
+    expect(result.totalMkd).toBe(4020);
+  });
+
+  it('has a total of 0 for a month without expenses', async () => {
+    expect(await service.listMonth(A, '2025-09')).toEqual({
+      month: '2025-09',
+      transactions: [],
+      totalMkd: 0,
+    });
+  });
+
+  it("leaves out another user's expenses, in the list and in the total", async () => {
+    await service.createExpense(B, {
+      ...expense('Groceries', 999_999, '2025-11-10'),
+      categoryId: categoryId('Groceries', B),
+    });
+    const mine = await service.listMonth(A, '2025-11');
+    expect(mine.totalMkd).toBe(4320);
+    expect(mine.transactions).toHaveLength(3);
+    // Asking for the other user's category shows nothing, not their data.
+    expect(
+      (await service.listMonth(A, '2025-11', categoryId('Groceries', B))).transactions,
+    ).toEqual([]);
+  });
+});
+
+describe('updateExpense', () => {
+  const addOne = () => service.createExpense(A, expense('Groceries', 450, '2026-11-07', 'Vero'));
+
+  it('changes only what was sent', async () => {
+    const saved = await addOne();
+    const updated = await service.updateExpense(A, saved.id, { amountMkd: 500 });
+    expect(updated).toEqual({ ...saved, amountMkd: 500 });
+  });
+
+  it('can change several fields at once, including the category', async () => {
+    const saved = await addOne();
+    const updated = await service.updateExpense(A, saved.id, {
+      categoryId: categoryId('Water'),
+      amountMkd: 640,
+      occurredOn: '2026-11-01',
+      note: 'Oct bill',
+    });
+    expect(updated).toMatchObject({
+      categoryId: categoryId('Water'),
+      categoryName: 'Water',
+      amountMkd: 640,
+      occurredOn: '2026-11-01',
+      note: 'Oct bill',
+    });
+  });
+
+  it('clears the note with an empty text or null', async () => {
+    const saved = await addOne();
+    expect((await service.updateExpense(A, saved.id, { note: '' })).note).toBeNull();
+    await service.updateExpense(A, saved.id, { note: 'back again' });
+    expect((await service.updateExpense(A, saved.id, { note: null })).note).toBeNull();
+  });
+
+  it('never changes the kind', async () => {
+    const withdrawal = await service.createExpense(A, {
+      ...expense('Cash withdrawal', 5000),
+      kind: 'cash_withdrawal',
+    });
+    const updated = await service.updateExpense(A, withdrawal.id, { amountMkd: 6000 });
+    expect(updated.kind).toBe('cash_withdrawal');
+  });
+
+  it('answers "not found" for an unknown id and for another user\'s expense, changing nothing', async () => {
+    const saved = await addOne();
+    const unknown = await failure(service.updateExpense(A, 'tx-999', { amountMkd: 1 }));
+    expect(unknown.getStatus()).toBe(404);
+
+    const others = await failure(service.updateExpense(B, saved.id, { amountMkd: 1 }));
+    expect(others.getStatus()).toBe(404);
+    expect(codeOf(others)).toBe(ErrorCode.NotFound);
+    expect((await service.listRecent(A)).transactions[0]!.amountMkd).toBe(450);
+  });
+
+  it("refuses a move to an archived category, and to another user's category", async () => {
+    const saved = await addOne();
+    await categories.updateCategory(A, categoryId('Water'), { archived: true });
+
+    const archived = await failure(
+      service.updateExpense(A, saved.id, { categoryId: categoryId('Water') }),
+    );
+    expect(archived.getStatus()).toBe(409);
+
+    const foreign = await failure(
+      service.updateExpense(A, saved.id, { categoryId: categoryId('Water', B) }),
+    );
+    expect(foreign.getStatus()).toBe(404);
+    expect((await service.listRecent(A)).transactions[0]!.categoryName).toBe('Groceries');
+  });
+
+  it('still allows editing an expense whose own category was archived since', async () => {
+    const saved = await addOne();
+    await categories.updateCategory(A, categoryId('Groceries'), { archived: true });
+
+    const sameCategory = await service.updateExpense(A, saved.id, {
+      categoryId: categoryId('Groceries'),
+      amountMkd: 777,
+    });
+    expect(sameCategory.amountMkd).toBe(777);
+    expect((await service.updateExpense(A, saved.id, { note: 'still ok' })).note).toBe('still ok');
+  });
+
+  it('refuses a date in the future, changing nothing', async () => {
+    const saved = await addOne();
+    const error = await failure(service.updateExpense(A, saved.id, { occurredOn: '2026-11-10' }));
+    expect(error.getStatus()).toBe(400);
+    expect(
+      (await service.updateExpense(A, saved.id, { occurredOn: '2026-11-09' })).occurredOn,
+    ).toBe('2026-11-09');
+  });
+});
+
+describe('deleteExpense', () => {
+  it('removes exactly that expense and keeps the others', async () => {
+    const first = await service.createExpense(A, expense('Groceries', 1));
+    const second = await service.createExpense(A, expense('Groceries', 2));
+    const third = await service.createExpense(A, expense('Groceries', 3));
+
+    await service.deleteExpense(A, second.id);
+
+    expect((await service.listRecent(A)).transactions.map((t) => t.id)).toEqual([
+      third.id,
+      first.id,
+    ]);
+  });
+
+  it('answers "not found" the second time, and for an unknown id', async () => {
+    const saved = await service.createExpense(A, expense('Groceries', 1));
+    await service.deleteExpense(A, saved.id);
+    expect((await failure(service.deleteExpense(A, saved.id))).getStatus()).toBe(404);
+    expect((await failure(service.deleteExpense(A, 'tx-999'))).getStatus()).toBe(404);
+  });
+
+  it("refuses to delete another user's expense, which stays", async () => {
+    const saved = await service.createExpense(A, expense('Groceries', 1));
+    const error = await failure(service.deleteExpense(B, saved.id));
+    expect(error.getStatus()).toBe(404);
+    expect((await service.listRecent(A)).transactions).toHaveLength(1);
+  });
+});
