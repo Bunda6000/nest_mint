@@ -91,18 +91,27 @@ model Category {
   @@map("categories")
 }
 
+/// A cash withdrawal leaves the bank account and counts as an expense, but is tagged so it can be told apart.
+enum TransactionKind {
+  expense
+  cash_withdrawal
+
+  @@map("transaction_kind")
+}
+
 /// Money that moved. For now only expenses; amounts are whole denars (see docs/adr/008-money-and-exchange-rates.md).
 model Transaction {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  categoryId String   @map("category_id") @db.Uuid
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @map("user_id") @db.Uuid
+  categoryId String          @map("category_id") @db.Uuid
+  kind       TransactionKind @default(expense)
   /// Whole denars, always above 0 (checked in the database as well).
-  amountMkd  Int      @map("amount_mkd")
+  amountMkd  Int             @map("amount_mkd")
   /// The calendar day the money was spent, no time of day.
-  occurredOn DateTime @map("occurred_on") @db.Date
+  occurredOn DateTime        @map("occurred_on") @db.Date
   note       String?
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// NoAction: a category in use cannot be deleted; deleting the whole user still works because both cascade.
