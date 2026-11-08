@@ -50,7 +50,8 @@ export const isoDateSchema = z
 
 const categoryIdSchema = z.uuid('Choose a category');
 
-const amountSchema = z
+/** Whole denars, 1 to 100,000,000. Shared by expenses and income. */
+export const amountMkdSchema = z
   .number({ error: 'Enter an amount' })
   .int('Enter whole denars, for example 1250')
   .min(1, 'Enter an amount above 0')
@@ -63,7 +64,7 @@ const noteSchema = z
 
 export const createExpenseSchema = z.object({
   categoryId: categoryIdSchema,
-  amountMkd: amountSchema,
+  amountMkd: amountMkdSchema,
   occurredOn: isoDateSchema,
   note: noteSchema.optional(),
   /** Defaults to a plain expense. */
@@ -80,7 +81,7 @@ export type CreateExpenseData = z.output<typeof createExpenseSchema>;
 export const updateExpenseSchema = z
   .object({
     categoryId: categoryIdSchema.optional(),
-    amountMkd: amountSchema.optional(),
+    amountMkd: amountMkdSchema.optional(),
     occurredOn: isoDateSchema.optional(),
     note: noteSchema.nullable().optional(),
   })

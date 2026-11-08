@@ -28,6 +28,7 @@ model User {
   categoryGroups CategoryGroup[]
   categories     Category[]
   transactions   Transaction[]
+  incomes        Income[]
 
   @@map("users")
 }
@@ -119,4 +120,33 @@ model Transaction {
 
   @@index([userId, occurredOn(sort: Desc)])
   @@map("transactions")
+}
+
+/// A salary repeats every month (stored once); other income happens once (stored with its date).
+enum IncomeRecurrence {
+  monthly
+  one_off
+
+  @@map("income_recurrence")
+}
+
+/// Money coming in. Amounts are whole denars. Monthly: startMonth, optional endMonth (both the first
+/// day of their month) and payDay; one-off: receivedOn. The database checks that the right ones are set.
+model Income {
+  id         String           @id @default(uuid()) @db.Uuid
+  userId     String           @map("user_id") @db.Uuid
+  name       String
+  amountMkd  Int              @map("amount_mkd")
+  recurrence IncomeRecurrence
+  receivedOn DateTime?        @map("received_on") @db.Date
+  startMonth DateTime?        @map("start_month") @db.Date
+  endMonth   DateTime?        @map("end_month") @db.Date
+  payDay     Int?             @map("pay_day") @db.SmallInt
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("incomes")
 }
