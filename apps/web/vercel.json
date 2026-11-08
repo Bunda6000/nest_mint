@@ -4,5 +4,8 @@
   "installCommand": "npx --yes pnpm@9.15.9 install --no-frozen-lockfile",
   "buildCommand": "npx --yes pnpm@9.15.9 --filter @nestmint/web... build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/v1/:path*", "destination": "https://nestmint-api.vercel.app/api/v1/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

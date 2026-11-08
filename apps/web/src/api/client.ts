@@ -1,6 +1,7 @@
 import type { ApiErrorBody } from '@nestmint/shared';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
+// Same-origin by default: Vercel (production) and the Vite dev server (local) forward /api to the API.
+const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 /** An error returned by the API in the standard ApiErrorBody shape. */
 export class ApiError extends Error {
