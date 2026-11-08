@@ -1,24 +1,21 @@
-import { convertMkdToEur } from '@nestmint/finance-engine';
 import {
   type CategoriesResponse,
-  createExpenseSchema,
-  fieldErrors,
-  MAX_NOTE_LENGTH,
+  type TransactionKind,
   type TransactionResponse,
   type TransactionsResponse,
 } from '@nestmint/shared';
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { ApiError } from '../../api/client';
-import { formatEurCents, formatMkd, localDay } from '../../format';
+import { formatMkd } from '../../format';
 import { useAuth } from '../auth/AuthContext';
-import { parseAmount } from './amount';
-import { CategoryPicker } from './CategoryPicker';
+import { ExpenseForm, type ExpenseValues } from './ExpenseForm';
 import { RecentExpenses } from './RecentExpenses';
 
 type Load<T> = { status: 'loading' } | { status: 'error' } | { status: 'ready'; data: T };
 
 const RECENT = 10;
+/** The default category that cash withdrawals are booked under (Banks → Cash withdrawal). */
+const WITHDRAWAL_CATEGORY = 'Cash withdrawal';
 
 export function AddExpensePage() {
   const { authedGet, authedSend } = useAuth();
@@ -26,16 +23,8 @@ export function AddExpensePage() {
   const [recent, setRecent] = useState<Load<TransactionsResponse>>({ status: 'loading' });
   const [categoriesAttempt, setCategoriesAttempt] = useState(0);
   const [recentAttempt, setRecentAttempt] = useState(0);
-
-  const [amountText, setAmountText] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [day, setDay] = useState(() => localDay());
-  const [note, setNote] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [problem, setProblem] = useState<string | null>(null);
+  const [kind, setKind] = useState<TransactionKind>('expense');
   const [saved, setSaved] = useState<TransactionResponse | null>(null);
-  const [saving, setSaving] = useState(false);
-  const amountInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -57,75 +46,34 @@ export function AddExpensePage() {
     };
   }, [authedGet, recentAttempt]);
 
-  const parsed = parseAmount(amountText);
+  /** In cash withdrawal mode the withdrawal category is selected for you, if it still exists. */
+  const preferredCategoryId = useMemo(() => {
+    if (kind !== 'cash_withdrawal' || categories.status !== 'ready') return '';
+    const found = categories.data.groups
+      .flatMap((group) => group.categories)
+      .find((category) => category.name === WITHDRAWAL_CATEGORY);
+    return found?.id ?? '';
+  }, [kind, categories]);
 
-  /** A live euro estimate under the amount; nothing while the amount or date is not usable. */
-  const eurPreview = useMemo(() => {
-    if (parsed.status !== 'ok' || parsed.value < 1) return null;
-    try {
-      return formatEurCents(convertMkdToEur(parsed.value, day).eurCents);
-    } catch {
-      return null;
-    }
-  }, [parsed, day]);
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (saving) return;
-    setSaved(null);
-    setProblem(null);
-
-    const found: Record<string, string> = {};
-    const result = createExpenseSchema.safeParse({
-      categoryId,
-      amountMkd: parsed.status === 'ok' ? parsed.value : undefined,
-      occurredOn: day,
-      note,
+  async function save(values: ExpenseValues) {
+    const expense = await authedSend<TransactionResponse>('POST', '/transactions', {
+      ...values,
+      ...(kind === 'cash_withdrawal' ? { kind } : {}),
     });
-    if (!result.success) Object.assign(found, fieldErrors(result.error));
-    // The box holds text, so a typo like "12.5" needs its own, clearer message than "Enter an amount".
-    if (parsed.status === 'invalid') found.amountMkd = parsed.message;
-    if (!result.success || parsed.status === 'invalid') {
-      setErrors(found);
-      return;
-    }
-    setErrors({});
-
-    setSaving(true);
-    try {
-      const expense = await authedSend<TransactionResponse>('POST', '/transactions', {
-        categoryId,
-        amountMkd: result.data.amountMkd,
-        occurredOn: result.data.occurredOn,
-        ...(result.data.note ? { note: result.data.note } : {}),
-      });
-      setSaved(expense);
-      setAmountText('');
-      setNote('');
-      setRecentAttempt((n) => n + 1);
-      amountInput.current?.focus();
-    } catch (error) {
-      if (error instanceof ApiError) {
-        setErrors(error.details);
-        setProblem(error.message);
-        // The category may have been archived or removed on another device: show the current list.
-        if (error.code === 'CONFLICT' || error.code === 'NOT_FOUND') {
-          setCategoryId('');
-          setCategoriesAttempt((n) => n + 1);
-        }
-      } else {
-        setProblem('Something went wrong. Please try again.');
-      }
-    } finally {
-      setSaving(false);
-    }
+    setSaved(expense);
+    setRecentAttempt((n) => n + 1);
   }
 
   return (
     <section className="mx-auto max-w-md p-6">
-      <Link to="/" className="text-sm text-emerald-700 underline">
-        ← Back
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link to="/" className="text-sm text-emerald-700 underline">
+          ← Back
+        </Link>
+        <Link to="/transactions" className="text-sm text-emerald-700 underline">
+          All expenses
+        </Link>
+      </div>
       <h1 className="mt-3 text-2xl font-semibold">Add expense</h1>
 
       {categories.status === 'loading' && (
@@ -151,104 +99,55 @@ export function AddExpensePage() {
       )}
 
       {categories.status === 'ready' && (
-        <form
-          onSubmit={(event) => void handleSubmit(event)}
-          noValidate
-          className="mt-6 flex flex-col gap-5"
-        >
-          <div>
-            <label htmlFor="amount" className="text-sm font-medium text-gray-700">
-              Amount (MKD)
-            </label>
-            <input
-              id="amount"
-              ref={amountInput}
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              autoFocus
-              value={amountText}
-              onChange={(event) => setAmountText(event.target.value)}
-              aria-invalid={errors.amountMkd ? true : undefined}
-              aria-describedby="amount-hint"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-lg"
-            />
-            <p id="amount-hint" aria-live="polite" className="mt-1 min-h-5 text-sm text-gray-500">
-              {eurPreview ? `≈ ${eurPreview}` : ''}
-            </p>
-            {errors.amountMkd && (
-              <p role="alert" className="text-sm text-red-700">
-                {errors.amountMkd}
+        <div className="mt-6 flex flex-col gap-5">
+          <fieldset>
+            <legend className="text-sm font-medium text-gray-700">Type</legend>
+            <div className="mt-2 flex gap-2">
+              {(
+                [
+                  ['expense', 'Expense'],
+                  ['cash_withdrawal', 'Withdraw cash'],
+                ] as const
+              ).map(([value, label]) => (
+                <label
+                  key={value}
+                  className="cursor-pointer rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-700 has-checked:bg-emerald-700 has-checked:text-white has-focus-visible:ring-2 has-focus-visible:ring-emerald-500"
+                >
+                  <input
+                    type="radio"
+                    name="kind"
+                    value={value}
+                    checked={kind === value}
+                    onChange={() => setKind(value)}
+                    className="sr-only"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            {kind === 'cash_withdrawal' && (
+              <p className="mt-2 text-sm text-gray-500">
+                Money taken out of the bank account. It counts as an expense.
               </p>
             )}
-          </div>
+          </fieldset>
 
-          <CategoryPicker
+          <ExpenseForm
             groups={categories.data.groups}
-            value={categoryId}
-            onChange={setCategoryId}
-            error={errors.categoryId}
+            submitLabel="Save expense"
+            clearAfterSave
+            preferredCategoryId={preferredCategoryId}
+            onAttempt={() => setSaved(null)}
+            onSave={save}
+            onCategoryUnavailable={() => setCategoriesAttempt((n) => n + 1)}
           />
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="day" className="text-sm font-medium text-gray-700">
-                Date
-              </label>
-              <input
-                id="day"
-                type="date"
-                value={day}
-                onChange={(event) => setDay(event.target.value)}
-                aria-invalid={errors.occurredOn ? true : undefined}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-              />
-              {errors.occurredOn && (
-                <p role="alert" className="text-sm text-red-700">
-                  {errors.occurredOn}
-                </p>
-              )}
-            </div>
-            <div>
-              <label htmlFor="note" className="text-sm font-medium text-gray-700">
-                Note (optional)
-              </label>
-              <input
-                id="note"
-                type="text"
-                value={note}
-                maxLength={MAX_NOTE_LENGTH}
-                onChange={(event) => setNote(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-              />
-              {errors.note && (
-                <p role="alert" className="text-sm text-red-700">
-                  {errors.note}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {problem && (
-            <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-              {problem}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg bg-emerald-700 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save expense'}
-          </button>
 
           {saved && (
             <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
               Saved: {formatMkd(saved.amountMkd)} · {saved.categoryName}
             </p>
           )}
-        </form>
+        </div>
       )}
 
       <h2 className="mt-8 text-lg font-semibold">Recent expenses</h2>

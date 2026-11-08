@@ -21,7 +21,7 @@ interface RequestOptions {
   token?: string;
 }
 
-export type ApiMethod = 'GET' | 'POST' | 'PATCH' | 'PUT';
+export type ApiMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 async function request<T>(method: ApiMethod, path: string, options: RequestOptions): Promise<T> {
   const headers: Record<string, string> = {};
@@ -59,11 +59,13 @@ export function apiGet<T>(path: string, token?: string): Promise<T> {
 }
 
 export function apiSend<T>(
-  method: 'POST' | 'PATCH' | 'PUT',
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   body: unknown = {},
   token?: string,
 ): Promise<T> {
+  // A DELETE carries no body.
+  if (method === 'DELETE') return request<T>(method, path, token ? { token } : {});
   return request<T>(method, path, token ? { body, token } : { body });
 }
 

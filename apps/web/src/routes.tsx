@@ -5,6 +5,7 @@ import { RequireAuth } from './features/auth/RequireAuth';
 import { CategoriesPage } from './features/categories/CategoriesPage';
 import { HomePage } from './features/home/HomePage';
 import { AddExpensePage } from './features/spending/AddExpensePage';
+import { TransactionsPage } from './features/spending/TransactionsPage';
 
 export const routes: RouteObject[] = [
   {
@@ -28,6 +29,14 @@ export const routes: RouteObject[] = [
     element: (
       <RequireAuth>
         <AddExpensePage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/transactions',
+    element: (
+      <RequireAuth>
+        <TransactionsPage />
       </RequireAuth>
     ),
   },

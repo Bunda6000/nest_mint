@@ -25,7 +25,11 @@ interface AuthContextValue {
    */
   authedGet: <T>(path: string) => Promise<T>;
   /** Like authedGet, for changes. The body is sent as JSON; a 204 answer gives back null. */
-  authedSend: <T>(method: 'POST' | 'PATCH' | 'PUT', path: string, body?: unknown) => Promise<T>;
+  authedSend: <T>(
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    path: string,
+    body?: unknown,
+  ) => Promise<T>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -110,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const authedSend = useCallback(
-    <T,>(method: 'POST' | 'PATCH' | 'PUT', path: string, body?: unknown): Promise<T> =>
+    <T,>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> =>
       authed((token) => apiSend<T>(method, path, body, token)),
     [authed],
   );

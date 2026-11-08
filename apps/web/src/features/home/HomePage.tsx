@@ -42,7 +42,10 @@ export function HomePage() {
       >
         Add expense
       </Link>
-      <nav className="mt-4">
+      <nav className="mt-4 flex gap-4">
+        <Link to="/transactions" className="text-emerald-700 underline">
+          Expenses
+        </Link>
         <Link to="/categories" className="text-emerald-700 underline">
           Categories
         </Link>
