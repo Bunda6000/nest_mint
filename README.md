@@ -36,6 +36,12 @@ Log in locally: register at `/register`, then log in at `/login`. Set your own `
 node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 ```
 
+## API at a glance
+
+`/api/v1`: `auth/register`, `auth/login`, `auth/refresh`, `auth/logout`, `me`, `categories`, `health`.
+Everything except health and the auth endpoints needs a login. User data follows
+`docs/adr/006-user-data-isolation.md`.
+
 ## Database changes
 
 1. Edit `apps/api/prisma/schema.prisma`.

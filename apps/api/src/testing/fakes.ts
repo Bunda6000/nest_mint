@@ -1,3 +1,6 @@
+import type { CategoriesResponse } from '@nestmint/shared';
+import type { CategoriesRepository } from '../categories/categories.repository.js';
+import type { SeedGroup } from '../categories/categories.seed.js';
 import { Clock } from '../common/clock.js';
 import type {
   NewRefreshToken,
@@ -76,5 +79,33 @@ export class FakeClock extends Clock {
 
   advance(ms: number): void {
     this.current = new Date(this.current.getTime() + ms);
+  }
+}
+
+/** Keeps each user's categories apart, like the real repository. */
+export class InMemoryCategories implements CategoriesRepository {
+  private readonly byUser = new Map<string, CategoriesResponse>();
+  private readonly seeded = new Set<string>();
+  seedCalls = 0;
+
+  async needsSeeding(userId: string): Promise<boolean> {
+    return !this.seeded.has(userId);
+  }
+
+  async seedDefaultsOnce(userId: string, groups: readonly SeedGroup[]): Promise<void> {
+    this.seedCalls += 1;
+    if (this.seeded.has(userId)) return;
+    this.seeded.add(userId);
+    this.byUser.set(userId, {
+      groups: groups.map((group, g) => ({
+        id: `${userId}-g${g}`,
+        name: group.name,
+        categories: group.categories.map((name, c) => ({ id: `${userId}-g${g}-c${c}`, name })),
+      })),
+    });
+  }
+
+  async list(userId: string): Promise<CategoriesResponse> {
+    return this.byUser.get(userId) ?? { groups: [] };
   }
 }

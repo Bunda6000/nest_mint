@@ -1,7 +1,7 @@
 // Database schema. See Notion: 04 · Application Design.
 
 generator client {
-  provider = "prisma-client"
+  provider            = "prisma-client"
   output              = "../src/generated/prisma"
   moduleFormat        = "esm"
   importFileExtension = "js"
@@ -12,17 +12,21 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(uuid()) @db.Uuid
-  email           String   @unique
-  passwordHash    String   @map("password_hash")
-  displayName     String?  @map("display_name")
-  baseCurrency    String   @default("MKD") @map("base_currency") @db.Char(3)
-  displayCurrency String   @default("EUR") @map("display_currency") @db.Char(3)
-  locale          String   @default("en")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid()) @db.Uuid
+  email              String    @unique
+  passwordHash       String    @map("password_hash")
+  displayName        String?   @map("display_name")
+  baseCurrency       String    @default("MKD") @map("base_currency") @db.Char(3)
+  displayCurrency    String    @default("EUR") @map("display_currency") @db.Char(3)
+  locale             String    @default("en")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  /// Set once when the default categories were created; never seeded again after that.
+  categoriesSeededAt DateTime? @map("categories_seeded_at")
 
-  refreshTokens RefreshToken[]
+  refreshTokens  RefreshToken[]
+  categoryGroups CategoryGroup[]
+  categories     Category[]
 
   @@map("users")
 }
@@ -42,4 +46,38 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+model CategoryGroup {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  sortOrder Int      @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories Category[]
+
+  @@unique([userId, name])
+  /// Lets categories reference (group, owner) together, so a category can never point at another user's group.
+  @@unique([id, userId])
+  @@map("category_groups")
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  groupId   String   @map("group_id") @db.Uuid
+  name      String
+  sortOrder Int      @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group CategoryGroup @relation(fields: [groupId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@unique([groupId, name])
+  @@index([userId])
+  @@map("categories")
 }

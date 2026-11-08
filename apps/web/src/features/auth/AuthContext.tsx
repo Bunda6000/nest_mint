@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { ApiError, apiPost } from '../../api/client';
+import { ApiError, apiGet, apiPost } from '../../api/client';
 
 type AuthState =
   | { status: 'loading' }
@@ -19,6 +19,11 @@ interface AuthContextValue {
   state: AuthState;
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * GET with the access token. If the token has expired (15 minutes), the session is renewed from
+   * the refresh cookie and the request is retried once; if that fails the user is logged out.
+   */
+  authedGet: <T>(path: string) => Promise<T>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -76,7 +81,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ state, login, logout }), [state, login, logout]);
+  const accessToken = state.status === 'authenticated' ? state.accessToken : undefined;
+  const authedGet = useCallback(
+    async <T,>(path: string): Promise<T> => {
+      try {
+        return await apiGet<T>(path, accessToken);
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 401) throw error;
+        const renewed = await restoreSession().catch(() => null);
+        if (!renewed) {
+          setState({ status: 'anonymous' });
+          throw error;
+        }
+        setState(toAuthenticated(renewed));
+        return apiGet<T>(path, renewed.accessToken);
+      }
+    },
+    [accessToken],
+  );
+
+  const value = useMemo(
+    () => ({ state, login, logout, authedGet }),
+    [state, login, logout, authedGet],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

@@ -1,4 +1,5 @@
 import { monthlySummary } from '@nestmint/finance-engine';
+import { Link } from 'react-router';
 import { formatMkd, formatRate } from '../../format';
 import { useAuth } from '../auth/AuthContext';
 
@@ -35,6 +36,11 @@ export function HomePage() {
           <dd className="text-lg font-semibold">{formatRate(example.savingsRate)}</dd>
         </div>
       </dl>
+      <nav className="mt-6">
+        <Link to="/categories" className="text-emerald-700 underline">
+          Categories
+        </Link>
+      </nav>
     </section>
   );
 }
