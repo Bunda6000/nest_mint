@@ -10,9 +10,11 @@ import { AuthProvider } from '../auth/AuthContext';
 const C1 = '11111111-1111-4111-8111-111111111111';
 const C2 = '22222222-2222-4222-8222-222222222222';
 const C3 = '33333333-3333-4333-8333-333333333333';
+const C4 = '44444444-4444-4444-8444-444444444444';
 
 interface Tx {
   id: string;
+  kind: 'expense' | 'cash_withdrawal';
   categoryId: string;
   categoryName: string;
   amountMkd: number;
@@ -37,6 +39,12 @@ const tree = {
       archived: false,
       categories: [{ id: C3, groupId: 'g2', name: 'Water', archived: false }],
     },
+    {
+      id: 'g4',
+      name: 'Banks',
+      archived: false,
+      categories: [{ id: C4, groupId: 'g4', name: 'Cash withdrawal', archived: false }],
+    },
     { id: 'g3', name: 'Pets', archived: false, categories: [] },
   ],
 };
@@ -47,7 +55,7 @@ interface Call {
   body?: Record<string, unknown>;
 }
 
-function fakeApi(initial: Tx[] = []) {
+function fakeApi(initial: Tx[] = [], categoryTree: typeof tree = tree) {
   const transactions = [...initial];
   const calls: Call[] = [];
   let failNextPost: { status: number; error: Record<string, unknown> } | null = null;
@@ -78,7 +86,11 @@ function fakeApi(initial: Tx[] = []) {
         failCategories -= 1;
         return reply(500, { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } });
       }
-      return reply(200, tree);
+      return reply(200, categoryTree);
+    }
+    if (method === 'GET' && path.startsWith('/transactions?month=')) {
+      const month = new URLSearchParams(path.split('?')[1]).get('month');
+      return reply(200, { month, transactions: [], totalMkd: 0 });
     }
     if (method === 'GET' && path.startsWith('/transactions')) {
       if (failRecent > 0) {
@@ -105,6 +117,7 @@ function fakeApi(initial: Tx[] = []) {
       }
       const created: Tx = {
         id: `t${transactions.length + 1}`,
+        kind: body?.kind === 'cash_withdrawal' ? 'cash_withdrawal' : 'expense',
         categoryId: String(body?.categoryId),
         categoryName: names.get(String(body?.categoryId)) ?? '?',
         amountMkd: Number(body?.amountMkd),
@@ -153,8 +166,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function setup(initial: Tx[] = [], path = '/expenses/new') {
-  const api = fakeApi(initial);
+function setup(initial: Tx[] = [], path = '/expenses/new', categoryTree: typeof tree = tree) {
+  const api = fakeApi(initial, categoryTree);
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   render(
     <AuthProvider>
@@ -452,6 +465,7 @@ describe('loading', () => {
     setup([
       {
         id: 't1',
+        kind: 'expense',
         categoryId: C1,
         categoryName: 'Groceries',
         amountMkd: 100,
@@ -460,6 +474,7 @@ describe('loading', () => {
       },
       {
         id: 't2',
+        kind: 'expense',
         categoryId: C3,
         categoryName: 'Water',
         amountMkd: 640,
@@ -525,5 +540,110 @@ describe('getting there', () => {
 
     expect(router.state.location.pathname).toBe('/expenses/new');
     await ready();
+  });
+});
+
+describe('withdrawing cash', () => {
+  const kindRadio = (name: string) => screen.getByRole('radio', { name }) as HTMLInputElement;
+
+  it('starts as a plain expense', async () => {
+    setup();
+    await ready();
+    expect(kindRadio('Expense').checked).toBe(true);
+    expect(kindRadio('Withdraw cash').checked).toBe(false);
+    expect((chip('Cash withdrawal') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('selects the Cash withdrawal category, explains itself, and saves as a cash withdrawal', async () => {
+    const { user, api } = setup();
+    await ready();
+    await user.click(kindRadio('Withdraw cash'));
+
+    expect((chip('Cash withdrawal') as HTMLInputElement).checked).toBe(true);
+    expect(
+      screen.getByText('Money taken out of the bank account. It counts as an expense.'),
+    ).toBeTruthy();
+
+    await user.type(amountBox(), '5000');
+    await user.click(saveButton());
+    await screen.findByRole('status');
+
+    expect(api.posts()[0]!.body).toEqual({
+      categoryId: C4,
+      amountMkd: 5000,
+      occurredOn: '2026-11-08',
+      kind: 'cash_withdrawal',
+    });
+  });
+
+  it('keeps what was typed when switching type, and clears the category when switching back', async () => {
+    const { user, api } = setup();
+    await ready();
+    await user.type(amountBox(), '700');
+    await user.click(kindRadio('Withdraw cash'));
+    expect(amountBox().value).toBe('700');
+    expect((chip('Cash withdrawal') as HTMLInputElement).checked).toBe(true);
+
+    await user.click(kindRadio('Expense'));
+    expect(amountBox().value).toBe('700');
+    expect((chip('Cash withdrawal') as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByText(/Money taken out of the bank account/)).toBeNull();
+
+    await user.click(chip('Groceries'));
+    await user.click(saveButton());
+    await screen.findByRole('status');
+    expect(api.posts()[0]!.body).toEqual({
+      categoryId: C1,
+      amountMkd: 700,
+      occurredOn: '2026-11-08',
+    });
+  });
+
+  it('allows another category for the withdrawal', async () => {
+    const { user, api } = setup();
+    await ready();
+    await user.click(kindRadio('Withdraw cash'));
+    await user.click(chip('Water'));
+    await user.type(amountBox(), '100');
+    await user.click(saveButton());
+    await screen.findByRole('status');
+
+    expect(api.posts()[0]!.body).toMatchObject({ categoryId: C3, kind: 'cash_withdrawal' });
+  });
+
+  it('selects nothing, and asks for a category, when there is no Cash withdrawal category', async () => {
+    const withoutIt = { groups: tree.groups.filter((group) => group.id !== 'g4') };
+    const { user, api } = setup([], '/expenses/new', withoutIt);
+    await ready();
+    await user.click(kindRadio('Withdraw cash'));
+    await user.type(amountBox(), '100');
+    await user.click(saveButton());
+
+    expect(screen.getByText('Choose a category')).toBeTruthy();
+    expect(api.posts()).toEqual([]);
+  });
+
+  it('stays a cash withdrawal for the next entry after a save', async () => {
+    const { user, api } = setup();
+    await ready();
+    await user.click(kindRadio('Withdraw cash'));
+    await user.type(amountBox(), '1000');
+    await user.click(saveButton());
+    await screen.findByRole('status');
+    await user.type(amountBox(), '2000');
+    await user.click(saveButton());
+    await waitFor(() => expect(api.posts()).toHaveLength(2));
+
+    expect(api.posts().map((p) => p.body?.kind)).toEqual(['cash_withdrawal', 'cash_withdrawal']);
+  });
+});
+
+describe('getting to all expenses', () => {
+  it('links from the Add expense screen to the full list', async () => {
+    const { user, router } = setup();
+    await ready();
+    await user.click(screen.getByRole('link', { name: 'All expenses' }));
+    expect(router.state.location.pathname).toBe('/transactions');
+    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeTruthy();
   });
 });
