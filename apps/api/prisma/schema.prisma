@@ -49,12 +49,14 @@ model RefreshToken {
 }
 
 model CategoryGroup {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  name      String
-  sortOrder Int      @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  name       String
+  sortOrder  Int       @map("sort_order")
+  /// Archived groups are hidden but kept, so history can still show them.
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   categories Category[]
@@ -66,13 +68,15 @@ model CategoryGroup {
 }
 
 model Category {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  groupId   String   @map("group_id") @db.Uuid
-  name      String
-  sortOrder Int      @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  groupId    String    @map("group_id") @db.Uuid
+  name       String
+  sortOrder  Int       @map("sort_order")
+  /// Archived categories are hidden but kept, so history can still show them.
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   group CategoryGroup @relation(fields: [groupId, userId], references: [id, userId], onDelete: Cascade)

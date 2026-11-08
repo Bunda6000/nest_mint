@@ -7,6 +7,12 @@ export const ErrorCode = {
   Forbidden: 'FORBIDDEN',
   TooManyRequests: 'TOO_MANY_REQUESTS',
   NotFound: 'NOT_FOUND',
+  /** The name is used by an active item. */
+  NameTaken: 'NAME_TAKEN',
+  /** The name belongs to an archived item, which can be restored instead. */
+  NameInArchive: 'NAME_IN_ARCHIVE',
+  /** The request does not fit the current state (stale list, archived parent). */
+  Conflict: 'CONFLICT',
   Internal: 'INTERNAL_ERROR',
 } as const;
 

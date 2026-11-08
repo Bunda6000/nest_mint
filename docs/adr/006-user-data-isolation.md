@@ -9,7 +9,7 @@
 1. **Ownership in the schema:** every table except `users` has `user_id`, a foreign key to `users` with `ON DELETE CASCADE`. `src/prisma/schema-ownership.spec.ts` fails CI for a new table that does not.
 2. **Same-owner links in the database:** child rows reference their parent together with the owner (`categories` → `category_groups` on `(id, user_id)`), so a row can never point at another user's parent, even through a bug. Tested with a direct insert.
 3. **Repositories always take the owner:** every method of a user-data repository has `userId` as its first parameter and filters by it, including in nested reads. Controllers pass `@CurrentUser()`; there is no way to call a repository without one.
-4. **Two-user tests per endpoint:** `categories.e2e.spec.ts` registers two users and proves neither sees the other's rows. Copy its `newUser()` helper for every new user-data endpoint. For lookups by id, return 404 (not 403) for another user's row, so ids do not leak.
+4. **Two-user tests per endpoint:** `categories.e2e.spec.ts` registers two users and proves neither sees the other's rows. Use the `E2eHarness` in `src/testing/e2e.ts` (starts the app, creates users, cleans up) for every new user-data endpoint. For ids in the URL, answer 404 (not 403) for another user's row and for anything that is not a UUID, so ids do not leak (`UuidParamPipe`).
 
 Row Level Security stays on for every table to block Supabase's public API (ADR-005).
 
