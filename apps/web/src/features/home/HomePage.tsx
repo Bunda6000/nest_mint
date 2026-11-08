@@ -36,7 +36,13 @@ export function HomePage() {
           <dd className="text-lg font-semibold">{formatRate(example.savingsRate)}</dd>
         </div>
       </dl>
-      <nav className="mt-6">
+      <Link
+        to="/expenses/new"
+        className="mt-6 block rounded-lg bg-emerald-700 px-4 py-3 text-center font-medium text-white"
+      >
+        Add expense
+      </Link>
+      <nav className="mt-4">
         <Link to="/categories" className="text-emerald-700 underline">
           Categories
         </Link>

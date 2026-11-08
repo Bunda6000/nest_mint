@@ -8,3 +8,25 @@ export function formatRate(rate: number | null, locale = 'en-US'): string {
   if (rate === null) return '—';
   return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(rate);
 }
+
+/** Formats euro cents, e.g. 732 → "€7.32". */
+export function formatEurCents(cents: number, locale = 'en-US'): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' }).format(cents / 100);
+}
+
+/** Formats a calendar day, e.g. "2026-11-08" → "Nov 8, 2026". The day never shifts with the time zone. */
+export function formatDay(day: string, locale = 'en-US'): string {
+  return new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${day}T00:00:00Z`));
+}
+
+/** The phone's own calendar day as "YYYY-MM-DD" (not UTC, which can still be yesterday). */
+export function localDay(now: Date = new Date()): string {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
