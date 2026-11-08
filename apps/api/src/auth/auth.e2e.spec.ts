@@ -7,6 +7,8 @@ import { AppModule } from '../app.module.js';
 import { configureApp } from '../app.setup.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
+const DOMAIN = '@register-test.example';
+
 // Needs a migrated PostgreSQL database (CI provides one). Skipped when DATABASE_URL is unset.
 describe.skipIf(!process.env.DATABASE_URL)('POST /api/v1/auth/register', () => {
   let app: INestApplication;
@@ -21,10 +23,11 @@ describe.skipIf(!process.env.DATABASE_URL)('POST /api/v1/auth/register', () => {
   });
 
   beforeEach(async () => {
-    await prisma.user.deleteMany();
+    await prisma.user.deleteMany({ where: { email: { endsWith: DOMAIN } } });
   });
 
   afterAll(async () => {
+    await prisma.user.deleteMany({ where: { email: { endsWith: DOMAIN } } });
     await app.close();
   });
 
@@ -33,25 +36,30 @@ describe.skipIf(!process.env.DATABASE_URL)('POST /api/v1/auth/register', () => {
 
   it('creates the user with a normalised email and a hashed password', async () => {
     const response = await register({
-      email: ' Filip@Example.com ',
+      email: ' Filip@Register-Test.example ',
       password: 'correct-horse-battery',
       displayName: 'Filip',
     }).expect(201);
 
     expect(response.body).toEqual({
       id: expect.any(String),
-      email: 'filip@example.com',
+      email: 'filip@register-test.example',
       displayName: 'Filip',
     });
-    const row = await prisma.user.findUniqueOrThrow({ where: { email: 'filip@example.com' } });
+    const row = await prisma.user.findUniqueOrThrow({
+      where: { email: 'filip@register-test.example' },
+    });
     expect(row.passwordHash.startsWith('$argon2id$')).toBe(true);
     expect(row.baseCurrency).toBe('MKD');
   });
 
   it('returns 409 for an existing email, ignoring letter case', async () => {
-    await register({ email: 'filip@example.com', password: 'correct-horse-battery' }).expect(201);
+    await register({
+      email: 'filip@register-test.example',
+      password: 'correct-horse-battery',
+    }).expect(201);
     const response = await register({
-      email: 'FILIP@example.com',
+      email: 'FILIP@register-test.example',
       password: 'another-password-1',
     }).expect(409);
 

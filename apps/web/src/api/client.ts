@@ -15,13 +15,29 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+interface RequestOptions {
+  body?: unknown;
+  /** Access token, sent as a Bearer header. */
+  token?: string;
+}
+
+async function request<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  options: RequestOptions,
+): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (options.token) headers.Authorization = `Bearer ${options.token}`;
+
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      method,
+      headers,
+      // Sends the HttpOnly refresh cookie to the auth endpoints.
+      credentials: 'include',
+      ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
     });
   } catch {
     throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the server. Check your connection.');
@@ -38,4 +54,12 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     );
   }
   return data as T;
+}
+
+export function apiGet<T>(path: string, token?: string): Promise<T> {
+  return request<T>('GET', path, token ? { token } : {});
+}
+
+export function apiPost<T>(path: string, body: unknown = {}, token?: string): Promise<T> {
+  return request<T>('POST', path, token ? { body, token } : { body });
 }

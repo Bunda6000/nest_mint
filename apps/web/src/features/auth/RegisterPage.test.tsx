@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RegisterPage } from './RegisterPage';
 
@@ -19,7 +20,11 @@ describe('RegisterPage', () => {
   it('shows inline errors and does not call the API when input is invalid', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    render(<RegisterPage />);
+    render(
+      <MemoryRouter>
+        <RegisterPage />
+      </MemoryRouter>,
+    );
 
     await fillAndSubmit('not-an-email', 'short');
 
@@ -44,7 +49,11 @@ describe('RegisterPage', () => {
         ),
       ),
     );
-    render(<RegisterPage />);
+    render(
+      <MemoryRouter>
+        <RegisterPage />
+      </MemoryRouter>,
+    );
 
     await fillAndSubmit('filip@example.com', 'correct-horse-battery');
 
@@ -64,10 +73,15 @@ describe('RegisterPage', () => {
           ),
         ),
     );
-    render(<RegisterPage />);
+    render(
+      <MemoryRouter>
+        <RegisterPage />
+      </MemoryRouter>,
+    );
 
     await fillAndSubmit('filip@example.com', 'correct-horse-battery');
 
     expect(await screen.findByRole('heading', { name: 'Account created' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Log in' }).getAttribute('href')).toBe('/login');
   });
 });

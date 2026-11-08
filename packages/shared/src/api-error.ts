@@ -2,6 +2,10 @@
 export const ErrorCode = {
   ValidationFailed: 'VALIDATION_FAILED',
   EmailAlreadyRegistered: 'EMAIL_ALREADY_REGISTERED',
+  InvalidCredentials: 'INVALID_CREDENTIALS',
+  Unauthorized: 'UNAUTHORIZED',
+  Forbidden: 'FORBIDDEN',
+  TooManyRequests: 'TOO_MANY_REQUESTS',
   NotFound: 'NOT_FOUND',
   Internal: 'INTERNAL_ERROR',
 } as const;

@@ -5,6 +5,7 @@ import {
   type UserResponse,
 } from '@nestmint/shared';
 import { type FormEvent, useState } from 'react';
+import { Link } from 'react-router';
 import { ApiError, apiPost } from '../../api/client';
 import { TextField } from '../../components/TextField';
 
@@ -47,9 +48,15 @@ export function RegisterPage() {
       <section className="mx-auto max-w-sm p-6" aria-live="polite">
         <h1 className="text-2xl font-semibold">Account created</h1>
         <p className="mt-2 text-gray-600">
-          Welcome{created.displayName ? `, ${created.displayName}` : ''}. You can log in with{' '}
-          {created.email} once login is available.
+          Welcome{created.displayName ? `, ${created.displayName}` : ''}. You can now log in with{' '}
+          {created.email}.
         </p>
+        <Link
+          to="/login"
+          className="mt-4 inline-block rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700"
+        >
+          Log in
+        </Link>
       </section>
     );
   }
@@ -95,6 +102,12 @@ export function RegisterPage() {
           {submitting ? 'Creating account…' : 'Create account'}
         </button>
       </form>
+      <p className="mt-6 text-sm text-gray-600">
+        Already have an account?{' '}
+        <Link to="/login" className="text-emerald-700 underline">
+          Log in
+        </Link>
+      </p>
     </section>
   );
 }

@@ -10,6 +10,10 @@ const userFields = { id: true, email: true, passwordHash: true, displayName: tru
 export class PrismaUsersRepository implements UsersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  findById(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { id }, select: userFields });
+  }
+
   findByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email }, select: userFields });
   }

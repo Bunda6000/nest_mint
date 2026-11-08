@@ -30,7 +30,21 @@ pnpm dev:web                                # http://localhost:5173 (register: /
 
 No Docker? Install PostgreSQL 17 locally and set `DATABASE_URL` in `.env`.
 
-Schema change: edit `apps/api/prisma/schema.prisma`, then `pnpm --filter @nestmint/api prisma:migrate --name <change>`.
+Log in locally: register at `/register`, then log in at `/login`. Set your own `JWT_SECRET` in `.env`:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+```
+
+## Database changes
+
+1. Edit `apps/api/prisma/schema.prisma`.
+2. Generate the SQL: `pnpm --filter @nestmint/api prisma:diff` (compares your local database with the schema).
+3. Save it as `apps/api/prisma/migrations/<YYYYMMDDHHMMSS>_<name>/migration.sql` and add
+   `ALTER TABLE "<table>" ENABLE ROW LEVEL SECURITY;` for every new table (a test fails without it).
+4. Apply it: `pnpm --filter @nestmint/api prisma:deploy`.
+
+Do not use `prisma migrate dev` (see `docs/adr/005-migrations-without-shadow-database.md`).
 
 ## Checks (same as CI)
 

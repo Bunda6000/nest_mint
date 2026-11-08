@@ -10,6 +10,7 @@ export class DuplicateEmailError extends Error {
 }
 
 export interface UsersRepository {
+  findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
   /** @throws DuplicateEmailError */
   create(user: NewUser): Promise<User>;
