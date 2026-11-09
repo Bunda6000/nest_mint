@@ -4,6 +4,7 @@ import { RegisterPage } from './features/auth/RegisterPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { CategoriesPage } from './features/categories/CategoriesPage';
 import { HomePage } from './features/home/HomePage';
+import { IncomePage } from './features/income/IncomePage';
 import { AddExpensePage } from './features/spending/AddExpensePage';
 import { TransactionsPage } from './features/spending/TransactionsPage';
 
@@ -37,6 +38,14 @@ export const routes: RouteObject[] = [
     element: (
       <RequireAuth>
         <TransactionsPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/income',
+    element: (
+      <RequireAuth>
+        <IncomePage />
       </RequireAuth>
     ),
   },

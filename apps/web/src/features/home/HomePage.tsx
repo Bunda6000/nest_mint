@@ -46,6 +46,9 @@ export function HomePage() {
         <Link to="/transactions" className="text-emerald-700 underline">
           Expenses
         </Link>
+        <Link to="/income" className="text-emerald-700 underline">
+          Income
+        </Link>
         <Link to="/categories" className="text-emerald-700 underline">
           Categories
         </Link>
