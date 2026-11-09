@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentMonth, formatMonth, lastDayOfMonth, shiftMonth } from './months';
+import { currentMonth, formatMonth, lastDayOfMonth, shiftMonth, shortMonth } from './months';
 
 describe('currentMonth', () => {
   it('uses the local month with a leading zero', () => {
@@ -43,5 +43,15 @@ describe('formatMonth', () => {
     expect(formatMonth('2026-11')).toBe('November 2026');
     expect(formatMonth('2026-01')).toBe('January 2026');
     expect(formatMonth('2025-12')).toBe('December 2025');
+  });
+});
+
+describe('shortMonth', () => {
+  it.each([
+    ['2026-01', 'Jan'],
+    ['2026-11', 'Nov'],
+    ['2026-12', 'Dec'],
+  ])('%s is %s', (month, expected) => {
+    expect(shortMonth(month)).toBe(expected);
   });
 });
