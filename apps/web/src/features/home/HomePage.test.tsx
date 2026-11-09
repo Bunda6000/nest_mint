@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { routes } from '../../routes';
 import { session } from '../../testing/mock-api';
 import { AuthProvider } from '../auth/AuthContext';
+import { shiftMonth } from '../spending/months';
 import { CURRENCY_KEY } from './currency';
 
 interface Summary {
@@ -27,10 +28,56 @@ const summary = (month: string, income: number, expenses: number): Summary => ({
 const november = () => summary('2026-11', 130_000, 40_000);
 const october = () => summary('2026-10', 100_000, 50_000);
 
+// 61,500 denars is exactly 1,000.00 euros at the default rate, so the amounts below are easy to check.
+const breakdownFor = (month: string) => ({
+  month,
+  categories: [
+    {
+      categoryId: 'c1',
+      categoryName: 'Groceries',
+      groupId: 'g1',
+      groupName: 'Food',
+      amountMkd: month === '2026-11' ? 61_500 : 30_750,
+    },
+    {
+      categoryId: 'c2',
+      categoryName: 'Mortgage',
+      groupId: 'g2',
+      groupName: 'Banks',
+      amountMkd: 15_375,
+    },
+  ],
+  top: [
+    {
+      id: 't1',
+      kind: 'expense',
+      categoryId: 'c1',
+      categoryName: 'Groceries',
+      amountMkd: 30_750,
+      occurredOn: `${month}-02`,
+      note: 'Weekly shop',
+    },
+  ],
+});
+
+const historyFor = (month: string) => ({
+  months: Array.from({ length: 12 }, (_, i) => ({
+    month: shiftMonth(month, i - 11),
+    incomeMkd: 100_000,
+    expensesMkd: 60_000,
+    netMkd: 40_000,
+    cumulativeNetMkd: (i + 1) * 40_000,
+    savingsRate: 0.4,
+  })),
+});
+
 function fakeApi(months: Summary[] = [november(), october()]) {
   const requested: string[] = [];
   const held = new Map<string, Promise<void>>();
   const failOnce = new Set<string>();
+  const insightCalls: string[] = [];
+  const heldInsights = new Map<string, Promise<void>>();
+  const failInsightsOnce = new Set<string>();
   let logoutCalls = 0;
 
   const reply = (status: number, body?: unknown) =>
@@ -45,6 +92,22 @@ function fakeApi(months: Summary[] = [november(), october()]) {
       if (path === '/auth/logout' && method === 'POST') {
         logoutCalls += 1;
         return reply(204);
+      }
+      const insight = /^\/insights\/(breakdown|history)\?month=(\d{4}-\d{2})$/.exec(path);
+      if (insight && method === 'GET') {
+        const [, kind, month] = insight as unknown as [string, 'breakdown' | 'history', string];
+        insightCalls.push(`${kind}:${month}`);
+        const gate = heldInsights.get(kind);
+        if (gate) {
+          heldInsights.delete(kind);
+          await gate;
+        }
+        if (failInsightsOnce.delete(kind)) {
+          return reply(500, {
+            error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' },
+          });
+        }
+        return reply(200, kind === 'breakdown' ? breakdownFor(month) : historyFor(month));
       }
       const match = /^\/summary\?month=(\d{4}-\d{2})$/.exec(path);
       if (match && method === 'GET') {
@@ -68,6 +131,14 @@ function fakeApi(months: Summary[] = [november(), october()]) {
 
   return {
     requested,
+    insightCalls,
+    failInsights: (kind: 'breakdown' | 'history') => failInsightsOnce.add(kind),
+    /** The next request for this kind of chart data waits until the returned function is called. */
+    holdInsights: (kind: 'breakdown' | 'history') => {
+      let release!: () => void;
+      heldInsights.set(kind, new Promise<void>((resolve) => (release = resolve)));
+      return release;
+    },
     logoutCalls: () => logoutCalls,
     failOnce: (month: string) => failOnce.add(month),
     /** The next request for this month waits until the returned function is called. */
@@ -376,6 +447,103 @@ describe('when loading fails', () => {
     await user.click(screen.getByRole('button', { name: 'Previous month' }));
     expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeTruthy();
     await waitFor(() => expect(valueIn('Income')).toBe('€1,626.02'));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('the charts', () => {
+  const headings = ['Spending by group', 'Income vs expenses', 'Savings trend', 'Top 5 expenses'];
+  const chartsReady = () => screen.findByRole('heading', { name: 'Spending by group' });
+  const legend = () =>
+    within(screen.getByRole('heading', { name: 'Spending by group' }).parentElement!)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent);
+
+  it('shows the four charts under the numbers, for the month shown', async () => {
+    const { api } = setup();
+    await chartsReady();
+    for (const name of headings) {
+      expect(screen.getByRole('heading', { name })).toBeTruthy();
+    }
+    expect(api.insightCalls.sort()).toEqual(['breakdown:2026-11', 'history:2026-11']);
+    expect(legend()).toEqual(['Food€1,000.0080%', 'Banks€250.0020%']);
+    expect(screen.getByText(/Running total:/).textContent).toBe('Running total: €7,804.88');
+    expect(screen.getByText('Weekly shop')).toBeTruthy();
+    const top = screen.getByRole('heading', { name: 'Top 5 expenses' }).parentElement!;
+    expect(within(top).getByRole('listitem').textContent).toBe(
+      '1Weekly shopGroceries · Nov 2€500.00',
+    );
+  });
+
+  it('switches the chart amounts with the currency, without loading again', async () => {
+    const { api, user } = setup();
+    await chartsReady();
+    const calls = api.insightCalls.length;
+
+    await user.click(toggle('MKD'));
+    expect(legend()).toEqual(['Food61,500 MKD80%', 'Banks15,375 MKD20%']);
+    expect(screen.getByText(/Running total:/).textContent).toBe('Running total: 480,000 MKD');
+    expect(api.insightCalls.length).toBe(calls);
+  });
+
+  it('loads the charts of the month you go back to', async () => {
+    const { api, user } = setup();
+    await chartsReady();
+    await user.click(screen.getByRole('button', { name: 'Previous month' }));
+
+    await waitFor(() => expect(api.insightCalls).toContain('breakdown:2026-10'));
+    expect(api.insightCalls).toContain('history:2026-10');
+    await waitFor(() => expect(legend()).toEqual(['Food€500.0067%', 'Banks€250.0033%']));
+    const top = screen.getByRole('heading', { name: 'Top 5 expenses' }).parentElement!;
+    expect(within(top).getByRole('listitem').textContent).toContain('Groceries · Oct 2');
+  });
+
+  it('does not show charts of the month you left while the next one loads', async () => {
+    const { api, user } = setup();
+    await chartsReady();
+    const release = api.hold('2026-10');
+    await user.click(screen.getByRole('button', { name: 'Previous month' }));
+    await screen.findByRole('heading', { name: 'October 2026' });
+    expect(screen.queryByRole('heading', { name: 'Spending by group' })).toBeNull();
+    release();
+    await chartsReady();
+  });
+
+  it('shows the numbers at once while the charts are still loading', async () => {
+    const api = fakeApi();
+    const release = api.holdInsights('history');
+    const router = createMemoryRouter(routes, { initialEntries: ['/'] });
+    render(
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>,
+    );
+    await ready();
+    expect(valueIn('Income')).toBe('€2,113.82');
+    expect(screen.getByText('Loading charts…')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Spending by group' })).toBeNull();
+    release();
+    await chartsReady();
+    expect(screen.queryByText('Loading charts…')).toBeNull();
+  });
+
+  it('keeps the numbers when the charts fail, and a retry brings the charts', async () => {
+    const api = fakeApi();
+    api.failInsights('breakdown');
+    const router = createMemoryRouter(routes, { initialEntries: ['/'] });
+    render(
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>,
+    );
+    const user = userEvent.setup();
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load the charts.');
+    expect(valueIn('Income')).toBe('€2,113.82');
+    expect(screen.queryByRole('heading', { name: 'Spending by group' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Try charts again' }));
+    await chartsReady();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
