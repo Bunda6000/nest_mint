@@ -85,6 +85,11 @@ export class FakeClock extends Clock {
   advance(ms: number): void {
     this.current = new Date(this.current.getTime() + ms);
   }
+
+  /** Jump to a moment, forward or back. */
+  set(date: Date): void {
+    this.current = new Date(date);
+  }
 }
 
 interface GroupRow {
