@@ -40,7 +40,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 
 `/api/v1`: `auth/register`, `auth/login`, `auth/refresh`, `auth/logout`, `me`, `categories` (list, add, rename,
 archive/restore, reorder), `transactions` (add, recent or one month, edit, delete),
-`income` (list, add, edit, delete), `summary` (one month's totals), `health`.
+`income` (list, add, edit, delete), `summary` (one month's totals), `insights` (spending breakdown and 12-month history for the dashboard charts), `health`.
 Everything except health and the auth endpoints needs a login. User data follows
 `docs/adr/006-user-data-isolation.md`.
 
