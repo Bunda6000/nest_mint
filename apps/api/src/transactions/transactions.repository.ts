@@ -1,4 +1,4 @@
-import type { TransactionKind, TransactionResponse } from '@nestmint/shared';
+import type { CategoryTotalResponse, TransactionKind, TransactionResponse } from '@nestmint/shared';
 
 export const TRANSACTIONS_REPOSITORY = Symbol('TRANSACTIONS_REPOSITORY');
 
@@ -39,6 +39,21 @@ export interface TransactionsRepository {
    * expenses and cash withdrawals alike. 0 when there is nothing.
    */
   sumMonth(userId: string, month: string): Promise<number>;
+
+  /**
+   * What the user spent in each category in a calendar month ("YYYY-MM"), cash withdrawals
+   * included, so the totals add up to `sumMonth`. Only categories with spending; biggest first.
+   */
+  sumByCategory(userId: string, month: string): Promise<CategoryTotalResponse[]>;
+
+  /** The `limit` biggest transactions of a calendar month, biggest first (newest first on a tie). */
+  listBiggest(userId: string, month: string, limit: number): Promise<TransactionResponse[]>;
+
+  /**
+   * Spending per month from `fromMonth` to `toMonth` (both "YYYY-MM", included), keyed by month.
+   * A month with nothing spent is missing from the result.
+   */
+  sumByMonth(userId: string, fromMonth: string, toMonth: string): Promise<Record<string, number>>;
 
   /** `null` when the user has no such transaction. */
   find(userId: string, id: string): Promise<TransactionResponse | null>;

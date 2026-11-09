@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { TransactionKind, TransactionResponse } from '@nestmint/shared';
+import type { CategoryTotalResponse, TransactionKind, TransactionResponse } from '@nestmint/shared';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
@@ -103,6 +103,69 @@ export class PrismaTransactionsRepository implements TransactionsRepository {
       where: { userId, occurredOn: { gte: from, lt: to } },
     });
     return result._sum.amountMkd ?? 0;
+  }
+
+  async sumByCategory(userId: string, month: string): Promise<CategoryTotalResponse[]> {
+    const { from, to } = monthRange(month);
+    const totals = await this.prisma.transaction.groupBy({
+      by: ['categoryId'],
+      _sum: { amountMkd: true },
+      where: { userId, occurredOn: { gte: from, lt: to } },
+    });
+    if (totals.length === 0) return [];
+    const categories = await this.prisma.category.findMany({
+      where: { userId, id: { in: totals.map((t) => t.categoryId) } },
+      select: { id: true, name: true, group: { select: { id: true, name: true } } },
+    });
+    const byId = new Map(categories.map((c) => [c.id, c]));
+    return totals
+      .flatMap((total) => {
+        const category = byId.get(total.categoryId);
+        const amountMkd = total._sum.amountMkd ?? 0;
+        if (!category || amountMkd <= 0) return [];
+        return [
+          {
+            categoryId: category.id,
+            categoryName: category.name,
+            groupId: category.group.id,
+            groupName: category.group.name,
+            amountMkd,
+          },
+        ];
+      })
+      .sort((a, b) => b.amountMkd - a.amountMkd || a.categoryName.localeCompare(b.categoryName));
+  }
+
+  async listBiggest(userId: string, month: string, limit: number): Promise<TransactionResponse[]> {
+    const { from, to } = monthRange(month);
+    const rows = await this.prisma.transaction.findMany({
+      where: { userId, occurredOn: { gte: from, lt: to } },
+      orderBy: [{ amountMkd: 'desc' }, ...newestFirst],
+      take: limit,
+      select,
+    });
+    return rows.map(toResponse);
+  }
+
+  async sumByMonth(
+    userId: string,
+    fromMonth: string,
+    toMonth: string,
+  ): Promise<Record<string, number>> {
+    const days = await this.prisma.transaction.groupBy({
+      by: ['occurredOn'],
+      _sum: { amountMkd: true },
+      where: {
+        userId,
+        occurredOn: { gte: monthRange(fromMonth).from, lt: monthRange(toMonth).to },
+      },
+    });
+    const result: Record<string, number> = {};
+    for (const day of days) {
+      const month = day.occurredOn.toISOString().slice(0, 7);
+      result[month] = (result[month] ?? 0) + (day._sum.amountMkd ?? 0);
+    }
+    return result;
   }
 
   async find(userId: string, id: string): Promise<TransactionResponse | null> {

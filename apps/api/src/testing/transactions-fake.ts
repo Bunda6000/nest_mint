@@ -1,4 +1,4 @@
-import type { TransactionResponse } from '@nestmint/shared';
+import type { CategoryTotalResponse, TransactionResponse } from '@nestmint/shared';
 import type {
   NewTransaction,
   TransactionChange,
@@ -12,8 +12,14 @@ export class InMemoryTransactions implements TransactionsRepository {
   readonly rows: Row[] = [];
   private entered = 0;
 
-  /** `categoryName` stands in for the join the database does. */
-  constructor(private readonly categoryName: (userId: string, categoryId: string) => string) {}
+  /** `categoryName` and `groupOf` stand in for the joins the database does. */
+  constructor(
+    private readonly categoryName: (userId: string, categoryId: string) => string,
+    private readonly groupOf: (
+      userId: string,
+      categoryId: string,
+    ) => { id: string; name: string } = () => ({ id: 'group-1', name: 'Group' }),
+  ) {}
 
   async create(userId: string, input: NewTransaction): Promise<TransactionResponse> {
     const row: Row = {
@@ -58,6 +64,53 @@ export class InMemoryTransactions implements TransactionsRepository {
     return this.own(userId)
       .filter((r) => r.occurredOn.startsWith(`${month}-`))
       .reduce((sum, r) => sum + r.amountMkd, 0);
+  }
+
+  async sumByCategory(userId: string, month: string): Promise<CategoryTotalResponse[]> {
+    const totals = new Map<string, number>();
+    for (const r of this.own(userId).filter((r) => r.occurredOn.startsWith(`${month}-`))) {
+      totals.set(r.categoryId, (totals.get(r.categoryId) ?? 0) + r.amountMkd);
+    }
+    return [...totals]
+      .map(([categoryId, amountMkd]) => {
+        const group = this.groupOf(userId, categoryId);
+        return {
+          categoryId,
+          categoryName: this.categoryName(userId, categoryId),
+          groupId: group.id,
+          groupName: group.name,
+          amountMkd,
+        };
+      })
+      .sort((a, b) => b.amountMkd - a.amountMkd || a.categoryName.localeCompare(b.categoryName));
+  }
+
+  async listBiggest(userId: string, month: string, limit: number): Promise<TransactionResponse[]> {
+    return this.own(userId)
+      .filter((r) => r.occurredOn.startsWith(`${month}-`))
+      .sort(
+        (a, b) =>
+          b.amountMkd - a.amountMkd ||
+          b.occurredOn.localeCompare(a.occurredOn) ||
+          b.entered - a.entered,
+      )
+      .slice(0, limit)
+      .map((r) => InMemoryTransactions.response(r));
+  }
+
+  async sumByMonth(
+    userId: string,
+    fromMonth: string,
+    toMonth: string,
+  ): Promise<Record<string, number>> {
+    const result: Record<string, number> = {};
+    for (const r of this.own(userId)) {
+      const month = r.occurredOn.slice(0, 7);
+      if (month >= fromMonth && month <= toMonth) {
+        result[month] = (result[month] ?? 0) + r.amountMkd;
+      }
+    }
+    return result;
   }
 
   async find(userId: string, id: string): Promise<TransactionResponse | null> {
