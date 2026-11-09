@@ -29,6 +29,8 @@ model User {
   categories     Category[]
   transactions   Transaction[]
   incomes        Income[]
+  obligations    Obligation[]
+  bills          Bill[]
 
   @@map("users")
 }
@@ -84,6 +86,7 @@ model Category {
   group CategoryGroup @relation(fields: [groupId, userId], references: [id, userId], onDelete: Cascade)
 
   transactions Transaction[]
+  obligations  Obligation[]
 
   @@unique([groupId, name])
   /// Lets transactions reference (category, owner) together, so a transaction can never use another user's category.
@@ -149,4 +152,66 @@ model Income {
 
   @@index([userId])
   @@map("incomes")
+}
+
+/// How often a recurring bill is due: every month, every n months from its start month, or only in
+/// chosen calendar months (such as the heating season).
+enum ObligationRecurrence {
+  monthly
+  every_n_months
+  custom_months
+
+  @@map("obligation_recurrence")
+}
+
+/// A recurring bill, stored once with its schedule. Amounts are whole denars. Months are the first
+/// day of their month. `everyNMonths` applies to every_n_months and `months` (1 = January) to
+/// custom_months; the database checks that the right ones are set.
+model Obligation {
+  id                String               @id @default(uuid()) @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  categoryId        String               @map("category_id") @db.Uuid
+  name              String
+  payee             String?
+  expectedAmountMkd Int                  @map("expected_amount_mkd")
+  dueDay            Int                  @map("due_day") @db.SmallInt
+  recurrence        ObligationRecurrence
+  everyNMonths      Int?                 @map("every_n_months") @db.SmallInt
+  months            Int[]                @default([]) @db.SmallInt
+  startMonth        DateTime             @map("start_month") @db.Date
+  endMonth          DateTime?            @map("end_month") @db.Date
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// NoAction: a category in use cannot be deleted; deleting the whole user still works because both cascade.
+  category Category @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+  bills    Bill[]
+
+  /// Lets bills reference (obligation, owner) together, so a bill can never point at another user's obligation.
+  @@unique([id, userId])
+  @@index([userId])
+  @@map("obligations")
+}
+
+/// One bill: an obligation's expected amount due in one month. Created from the obligation, at most
+/// one per obligation and month (the unique key below is what stops duplicates).
+model Bill {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  obligationId      String   @map("obligation_id") @db.Uuid
+  /// The month the bill belongs to: the first day of that month.
+  periodMonth       DateTime @map("period_month") @db.Date
+  dueDate           DateTime @map("due_date") @db.Date
+  /// What the obligation expected when this bill was created.
+  expectedAmountMkd Int      @map("expected_amount_mkd")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// NoAction: an obligation with bills cannot be deleted; deleting the whole user still works because both cascade.
+  obligation Obligation @relation(fields: [obligationId, userId], references: [id, userId], onDelete: NoAction)
+
+  @@unique([obligationId, periodMonth])
+  @@index([userId, periodMonth])
+  @@map("bills")
 }
