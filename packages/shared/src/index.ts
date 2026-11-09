@@ -4,5 +4,6 @@ export * from './auth/register.js';
 export * from './categories.js';
 export * from './income.js';
 export * from './insights.js';
+export * from './obligations.js';
 export * from './summary.js';
 export * from './transactions.js';
