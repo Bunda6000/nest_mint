@@ -3,7 +3,9 @@ import { AuthModule } from './auth/auth.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { HealthModule } from './health/health.module.js';
 import { IncomeModule } from './income/income.module.js';
+import { BillsModule } from './bills/bills.module.js';
 import { InsightsModule } from './insights/insights.module.js';
+import { ObligationsModule } from './obligations/obligations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { SummaryModule } from './summary/summary.module.js';
 import { TransactionsModule } from './transactions/transactions.module.js';
@@ -18,6 +20,8 @@ import { TransactionsModule } from './transactions/transactions.module.js';
     IncomeModule,
     SummaryModule,
     InsightsModule,
+    ObligationsModule,
+    BillsModule,
   ],
 })
 export class AppModule {}
