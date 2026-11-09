@@ -96,6 +96,15 @@ export class PrismaTransactionsRepository implements TransactionsRepository {
     return rows.map(toResponse);
   }
 
+  async sumMonth(userId: string, month: string): Promise<number> {
+    const { from, to } = monthRange(month);
+    const result = await this.prisma.transaction.aggregate({
+      _sum: { amountMkd: true },
+      where: { userId, occurredOn: { gte: from, lt: to } },
+    });
+    return result._sum.amountMkd ?? 0;
+  }
+
   async find(userId: string, id: string): Promise<TransactionResponse | null> {
     const row = await this.prisma.transaction.findFirst({ where: { id, userId }, select });
     return row ? toResponse(row) : null;

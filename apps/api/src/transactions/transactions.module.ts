@@ -14,5 +14,6 @@ import { TransactionsService } from './transactions.service.js';
     TransactionsService,
     { provide: TRANSACTIONS_REPOSITORY, useClass: PrismaTransactionsRepository },
   ],
+  exports: [TRANSACTIONS_REPOSITORY],
 })
 export class TransactionsModule {}

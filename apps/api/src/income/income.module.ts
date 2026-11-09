@@ -7,5 +7,6 @@ import { PrismaIncomeRepository } from './prisma-income.repository.js';
 @Module({
   controllers: [IncomeController],
   providers: [IncomeService, { provide: INCOME_REPOSITORY, useClass: PrismaIncomeRepository }],
+  exports: [INCOME_REPOSITORY],
 })
 export class IncomeModule {}

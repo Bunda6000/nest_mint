@@ -34,6 +34,12 @@ export interface TransactionsRepository {
   /** Every transaction of a calendar month ("YYYY-MM"), newest first, optionally of one category. */
   listMonth(userId: string, month: string, categoryId?: string): Promise<TransactionResponse[]>;
 
+  /**
+   * The total, in whole denars, of everything the user spent in a calendar month ("YYYY-MM"):
+   * expenses and cash withdrawals alike. 0 when there is nothing.
+   */
+  sumMonth(userId: string, month: string): Promise<number>;
+
   /** `null` when the user has no such transaction. */
   find(userId: string, id: string): Promise<TransactionResponse | null>;
 

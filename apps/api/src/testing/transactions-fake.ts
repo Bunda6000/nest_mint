@@ -54,6 +54,12 @@ export class InMemoryTransactions implements TransactionsRepository {
       .map((r) => InMemoryTransactions.response(r));
   }
 
+  async sumMonth(userId: string, month: string): Promise<number> {
+    return this.own(userId)
+      .filter((r) => r.occurredOn.startsWith(`${month}-`))
+      .reduce((sum, r) => sum + r.amountMkd, 0);
+  }
+
   async find(userId: string, id: string): Promise<TransactionResponse | null> {
     const row = this.rows.find((r) => r.id === id && r.userId === userId);
     return row ? InMemoryTransactions.response(row) : null;
