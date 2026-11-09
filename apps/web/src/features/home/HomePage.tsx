@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { formatRate } from '../../format';
 import { useAuth } from '../auth/AuthContext';
+import { ChartsSection } from '../charts/ChartsSection';
 import { currentMonth, formatMonth, shiftMonth } from '../spending/months';
 import { type Currency, useCurrency } from './currency';
 import { amountChangeView, formatAmount, rateChangeView } from './kpi';
@@ -187,6 +188,7 @@ export function HomePage() {
               Nothing recorded in {formatMonth(month)} yet.
             </p>
           )}
+          <ChartsSection key={month} month={month} currency={currency} />
         </>
       )}
 

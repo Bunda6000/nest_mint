@@ -27,3 +27,10 @@ export function formatMonth(month: string, locale = 'en-US'): string {
     timeZone: 'UTC',
   }).format(new Date(`${month}-01T00:00:00Z`));
 }
+
+/** "2026-11" → "Nov", for the labels under a chart. */
+export function shortMonth(month: string, locale = 'en-US'): string {
+  return new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' }).format(
+    new Date(`${month}-01T00:00:00Z`),
+  );
+}
