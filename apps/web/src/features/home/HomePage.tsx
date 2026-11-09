@@ -205,6 +205,9 @@ export function HomePage() {
         <Link to="/income" className="text-emerald-700 underline">
           Income
         </Link>
+        <Link to="/obligations" className="text-emerald-700 underline">
+          Bills
+        </Link>
         <Link to="/categories" className="text-emerald-700 underline">
           Categories
         </Link>
