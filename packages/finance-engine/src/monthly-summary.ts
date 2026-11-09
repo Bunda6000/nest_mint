@@ -1,4 +1,4 @@
-import { assertMoney, type Money } from './money';
+import { assertMoney, type Money } from './money.js';
 
 export interface MonthlySummary {
   income: Money;

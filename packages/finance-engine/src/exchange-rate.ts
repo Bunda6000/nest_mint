@@ -1,4 +1,4 @@
-import { assertMoney, type Money } from './money';
+import { assertMoney, type Money } from './money.js';
 
 /** What Budget.xlsx hardcodes in every EUR column (`=C3/61.5`). */
 export const DEFAULT_MKD_PER_EUR = 61.5;

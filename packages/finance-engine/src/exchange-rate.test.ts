@@ -5,7 +5,7 @@ import {
   mkdToEurCents,
   rateOn,
   type RateEntry,
-} from './exchange-rate';
+} from './exchange-rate.js';
 
 describe('mkdToEurCents', () => {
   // Real rows of Budget.xlsx: the EUR column is `=C/61.5`, shown here in cents.

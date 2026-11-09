@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthlySummary } from './monthly-summary';
+import { monthlySummary } from './monthly-summary.js';
 
 describe('monthlySummary', () => {
   it('matches Budget.xlsx January 2025 (income 146,308, tracked expenses 82,272)', () => {
