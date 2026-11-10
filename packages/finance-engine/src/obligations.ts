@@ -99,3 +99,27 @@ export function dueDateInMonth(month: string, dueDay: number): string {
   ).getUTCDate();
   return `${month}-${String(Math.min(dueDay, lastDay)).padStart(2, '0')}`;
 }
+
+/** Every month from `fromMonth` to `toMonth` (both "YYYY-MM", included) in which a bill is due. */
+export function dueMonthsBetween(
+  schedule: BillSchedule,
+  fromMonth: string,
+  toMonth: string,
+): string[] {
+  assertMonth(fromMonth, 'fromMonth');
+  assertMonth(toMonth, 'toMonth');
+  assertSchedule(schedule);
+  const due: string[] = [];
+  let year = Number(fromMonth.slice(0, 4));
+  let month = Number(fromMonth.slice(5, 7));
+  for (;;) {
+    const current = `${year}-${String(month).padStart(2, '0')}`;
+    if (current > toMonth) return due;
+    if (isDueInMonth(schedule, current)) due.push(current);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+}

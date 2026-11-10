@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { type BillSchedule, dueDateInMonth, isDueInMonth } from './obligations.js';
+import {
+  type BillSchedule,
+  dueDateInMonth,
+  dueMonthsBetween,
+  isDueInMonth,
+} from './obligations.js';
 
 const schedule = (over: Partial<BillSchedule> = {}): BillSchedule => ({
   recurrence: 'monthly',
@@ -179,5 +184,49 @@ describe('dueDateInMonth', () => {
     expect(() => dueDateInMonth('2026-11', 0)).toThrow(RangeError);
     expect(() => dueDateInMonth('2026-11', 32)).toThrow(RangeError);
     expect(() => dueDateInMonth('2026-11', 1.5)).toThrow(RangeError);
+  });
+});
+
+describe('dueMonthsBetween', () => {
+  it('lists every due month in the range, both ends included', () => {
+    expect(dueMonthsBetween(schedule(), '2026-09', '2026-12')).toEqual([
+      '2026-09',
+      '2026-10',
+      '2026-11',
+      '2026-12',
+    ]);
+  });
+
+  it('skips months before the start and after the end', () => {
+    const s = schedule({ startMonth: '2026-10', endMonth: '2026-11' });
+    expect(dueMonthsBetween(s, '2026-08', '2027-01')).toEqual(['2026-10', '2026-11']);
+  });
+
+  it('follows every n months and chosen months, across a year boundary', () => {
+    const everyTwo = schedule({
+      recurrence: 'every_n_months',
+      everyNMonths: 2,
+      startMonth: '2026-09',
+    });
+    expect(dueMonthsBetween(everyTwo, '2026-09', '2027-02')).toEqual([
+      '2026-09',
+      '2026-11',
+      '2027-01',
+    ]);
+    const heating = schedule({ recurrence: 'custom_months', months: [12, 1] });
+    expect(dueMonthsBetween(heating, '2026-11', '2027-02')).toEqual(['2026-12', '2027-01']);
+  });
+
+  it('is empty for a range that ends before it starts, and one month works', () => {
+    expect(dueMonthsBetween(schedule(), '2026-12', '2026-11')).toEqual([]);
+    expect(dueMonthsBetween(schedule(), '2026-11', '2026-11')).toEqual(['2026-11']);
+  });
+
+  it('refuses bad months and bad schedules', () => {
+    expect(() => dueMonthsBetween(schedule(), '2026-13', '2026-12')).toThrow(RangeError);
+    expect(() => dueMonthsBetween(schedule(), '2026-01', 'x')).toThrow(RangeError);
+    expect(() => dueMonthsBetween(schedule({ dueDay: 0 }), '2026-01', '2026-02')).toThrow(
+      RangeError,
+    );
   });
 });

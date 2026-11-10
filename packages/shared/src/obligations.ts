@@ -4,7 +4,7 @@ import { amountMkdSchema, monthSchema } from './transactions.js';
 
 /**
  * A recurring bill (an "obligation") is stored once with its schedule; the bills of each month are
- * created from it (see `BillResponse`). Monthly: every month from the start month. Every n months:
+ * created from it (see `bills.ts`). Monthly: every month from the start month. Every n months:
  * counted from the start month. Custom months: only in the chosen calendar months (heating season).
  */
 export const OBLIGATION_RECURRENCES = ['monthly', 'every_n_months', 'custom_months'] as const;
@@ -34,37 +34,12 @@ export interface ObligationResponse {
   startMonth: string;
   /** The last month it can be due, "YYYY-MM"; null while it goes on. */
   endMonth: string | null;
+  /** The month it was entered, "YYYY-MM". Bills missed since then are created when catching up. */
+  createdMonth: string;
 }
 
 export interface ObligationsResponse {
   obligations: ObligationResponse[];
-}
-
-/** One bill: an obligation's amount due in one month. Created from the obligation, never twice. */
-export interface BillResponse {
-  id: string;
-  obligationId: string;
-  obligationName: string;
-  payee: string | null;
-  categoryId: string;
-  categoryName: string;
-  /** The month the bill belongs to, "YYYY-MM". */
-  period: string;
-  /** The date it is due, "YYYY-MM-DD". */
-  dueDate: string;
-  /** The obligation's expected amount when the bill was created. */
-  expectedAmountMkd: number;
-}
-
-export interface BillsResponse {
-  bills: BillResponse[];
-}
-
-/** The result of making sure a month's bills exist. */
-export interface GenerateBillsResponse {
-  month: string;
-  /** How many bills were new; 0 when the month already had all of them. */
-  created: number;
 }
 
 const nameSchema = z
