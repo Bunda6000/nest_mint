@@ -12,7 +12,11 @@ export class InMemoryObligations implements ObligationsRepository {
   readonly rows: Row[] = [];
   private counter = 0;
 
-  constructor(private readonly categoryName: (userId: string, categoryId: string) => string) {}
+  /** `createdMonth` says which month "now" is, so a test can enter a bill in a chosen month. */
+  constructor(
+    private readonly categoryName: (userId: string, categoryId: string) => string,
+    private readonly createdMonth: () => string = () => '2026-11',
+  ) {}
 
   async create(userId: string, input: NewObligation): Promise<ObligationResponse> {
     const row: Row = {
@@ -29,6 +33,7 @@ export class InMemoryObligations implements ObligationsRepository {
       months: input.recurrence === 'custom_months' ? [...input.months] : null,
       startMonth: input.startMonth,
       endMonth: input.endMonth,
+      createdMonth: this.createdMonth(),
     };
     this.rows.push(row);
     return InMemoryObligations.response(row);
@@ -82,6 +87,7 @@ export class InMemoryObligations implements ObligationsRepository {
       months: row.months ? [...row.months] : null,
       startMonth: row.startMonth,
       endMonth: row.endMonth,
+      createdMonth: row.createdMonth,
     };
   }
 }

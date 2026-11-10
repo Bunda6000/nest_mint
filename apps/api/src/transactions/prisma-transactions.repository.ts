@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { CategoryTotalResponse, TransactionKind, TransactionResponse } from '@nestmint/shared';
 import { randomUUID } from 'node:crypto';
+import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type {
-  NewTransaction,
-  TransactionChange,
-  TransactionsRepository,
+import {
+  type NewTransaction,
+  type TransactionChange,
+  TransactionInUseError,
+  type TransactionsRepository,
 } from './transactions.repository.js';
 
 const select = {
@@ -193,7 +195,15 @@ export class PrismaTransactionsRepository implements TransactionsRepository {
   }
 
   async delete(userId: string, id: string): Promise<boolean> {
-    const { count } = await this.prisma.transaction.deleteMany({ where: { id, userId } });
-    return count > 0;
+    try {
+      const { count } = await this.prisma.transaction.deleteMany({ where: { id, userId } });
+      return count > 0;
+    } catch (error) {
+      // A bill points at this expense (foreign key), so it is the payment of that bill.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new TransactionInUseError();
+      }
+      throw error;
+    }
   }
 }

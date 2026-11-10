@@ -1,5 +1,3 @@
-import type { BillResponse } from '@nestmint/shared';
-
 export const BILLS_REPOSITORY = Symbol('BILLS_REPOSITORY');
 
 export interface NewBill {
@@ -10,6 +8,50 @@ export interface NewBill {
   dueDate: string;
   /** Whole denars, above 0. */
   expectedAmountMkd: number;
+}
+
+/** A bill as stored. Whether it is paid, due or overdue is worked out by the service. */
+export interface BillRecord {
+  id: string;
+  obligationId: string;
+  obligationName: string;
+  payee: string | null;
+  categoryId: string;
+  categoryName: string;
+  period: string;
+  dueDate: string;
+  expectedAmountMkd: number;
+  actualAmountMkd: number | null;
+  invoiceRef: string | null;
+  /** The expense that records the payment; `null` while the bill is unpaid. */
+  paid: { transactionId: string; paidOn: string; amountMkd: number } | null;
+}
+
+/** One bill to pay: the day and the amount of the expense that is created for it. */
+export interface Payment {
+  billId: string;
+  /** "YYYY-MM-DD". */
+  paidOn: string;
+  /** Whole denars, above 0. */
+  amountMkd: number;
+}
+
+/** Only the fields that are present change. `null` takes the value away. */
+export interface BillChange {
+  actualAmountMkd?: number | null;
+  invoiceRef?: string | null;
+}
+
+export type BillPaymentProblem = 'not_found' | 'already_paid' | 'not_paid';
+
+/** Why a payment or an undo was refused; nothing was changed. */
+export class BillPaymentError extends Error {
+  constructor(
+    readonly reason: BillPaymentProblem,
+    readonly billId: string,
+  ) {
+    super(`Bill ${billId}: ${reason}`);
+  }
 }
 
 /**
@@ -25,5 +67,38 @@ export interface BillsRepository {
   createMissing(userId: string, bills: NewBill[]): Promise<number>;
 
   /** The bills of one month, by due date, then by name. */
-  listMonth(userId: string, month: string): Promise<BillResponse[]>;
+  listMonth(userId: string, month: string): Promise<BillRecord[]>;
+
+  /** Every unpaid bill, soonest due first (then by name). */
+  listUnpaid(userId: string): Promise<BillRecord[]>;
+
+  /** The `limit` most recently paid bills, latest payment first. */
+  listPaid(userId: string, limit: number): Promise<BillRecord[]>;
+
+  countPaid(userId: string): Promise<number>;
+
+  /** `null` when the user has no such bill. */
+  find(userId: string, id: string): Promise<BillRecord | null>;
+
+  /** Changes an UNPAID bill. `null` when the user has no such unpaid bill. */
+  update(userId: string, id: string, change: BillChange): Promise<BillRecord | null>;
+
+  /**
+   * Pays the bills, all or none: for each one an expense is created in the bill's category and the
+   * bill is linked to it, in one database transaction. A bill that is already paid (even by a
+   * request a moment ago) is refused and nothing is paid. Throws `BillPaymentError`.
+   * Returns the paid bills in the order given.
+   */
+  pay(userId: string, payments: Payment[]): Promise<BillRecord[]>;
+
+  /**
+   * Takes a payment back: the bill is unpaid again and its expense is deleted. Throws
+   * `BillPaymentError` when the bill does not exist or is not paid.
+   */
+  undoPayment(userId: string, billId: string): Promise<BillRecord>;
+}
+
+/** The note of the expense a payment creates: the bill's name, plus the invoice reference if known. */
+export function paymentNote(obligationName: string, invoiceRef: string | null): string {
+  return invoiceRef ? `${obligationName} · ${invoiceRef}` : obligationName;
 }

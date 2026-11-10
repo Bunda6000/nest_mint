@@ -20,6 +20,7 @@ const select = {
   months: true,
   startMonth: true,
   endMonth: true,
+  createdAt: true,
   category: { select: { name: true } },
 } as const;
 
@@ -35,6 +36,7 @@ interface Row {
   months: number[];
   startMonth: Date;
   endMonth: Date | null;
+  createdAt: Date;
   category: { name: string };
 }
 
@@ -56,6 +58,7 @@ const toResponse = (row: Row): ObligationResponse => ({
   months: row.recurrence === 'custom_months' ? [...row.months].sort((a, b) => a - b) : null,
   startMonth: month(row.startMonth)!,
   endMonth: month(row.endMonth),
+  createdMonth: month(row.createdAt)!,
 });
 
 @Injectable()

@@ -16,6 +16,7 @@ import {
 import {
   TRANSACTIONS_REPOSITORY,
   type TransactionChange,
+  TransactionInUseError,
   type TransactionsRepository,
 } from './transactions.repository.js';
 
@@ -94,7 +95,18 @@ export class TransactionsService {
   }
 
   async deleteExpense(userId: string, id: string): Promise<void> {
-    if (!(await this.transactions.delete(userId, id))) throw notFound('Transaction');
+    try {
+      if (!(await this.transactions.delete(userId, id))) throw notFound('Transaction');
+    } catch (error) {
+      if (error instanceof TransactionInUseError) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          ErrorCode.Conflict,
+          'This expense is the payment of a bill. Undo the payment on the Bills screen first.',
+        );
+      }
+      throw error;
+    }
   }
 
   /** The category must be the user's own (else "not found") and not archived (else "conflict"). */

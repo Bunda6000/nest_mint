@@ -1,8 +1,9 @@
 import type { CategoryTotalResponse, TransactionResponse } from '@nestmint/shared';
-import type {
-  NewTransaction,
-  TransactionChange,
-  TransactionsRepository,
+import {
+  type NewTransaction,
+  type TransactionChange,
+  TransactionInUseError,
+  type TransactionsRepository,
 } from '../transactions/transactions.repository.js';
 
 type Row = TransactionResponse & { userId: string; entered: number };
@@ -11,6 +12,9 @@ type Row = TransactionResponse & { userId: string; entered: number };
 export class InMemoryTransactions implements TransactionsRepository {
   readonly rows: Row[] = [];
   private entered = 0;
+  private issued = 0;
+  /** Ids that a bill points at; like the foreign key, they cannot be deleted. */
+  readonly locked = new Set<string>();
 
   /** `categoryName` and `groupOf` stand in for the joins the database does. */
   constructor(
@@ -23,7 +27,7 @@ export class InMemoryTransactions implements TransactionsRepository {
 
   async create(userId: string, input: NewTransaction): Promise<TransactionResponse> {
     const row: Row = {
-      id: `tx-${this.rows.length + 1}`,
+      id: `tx-${++this.issued}`,
       userId,
       entered: this.entered++,
       kind: input.kind,
@@ -138,6 +142,7 @@ export class InMemoryTransactions implements TransactionsRepository {
   async delete(userId: string, id: string): Promise<boolean> {
     const index = this.rows.findIndex((r) => r.id === id && r.userId === userId);
     if (index < 0) return false;
+    if (this.locked.has(id)) throw new TransactionInUseError();
     this.rows.splice(index, 1);
     return true;
   }

@@ -2,6 +2,13 @@ import type { CategoryTotalResponse, TransactionKind, TransactionResponse } from
 
 export const TRANSACTIONS_REPOSITORY = Symbol('TRANSACTIONS_REPOSITORY');
 
+/** The expense is the payment of a bill, so it cannot be deleted until the payment is undone. */
+export class TransactionInUseError extends Error {
+  constructor() {
+    super('Transaction is the payment of a bill');
+  }
+}
+
 export interface NewTransaction {
   kind: TransactionKind;
   categoryId: string;
@@ -65,6 +72,9 @@ export interface TransactionsRepository {
     change: TransactionChange,
   ): Promise<TransactionResponse | null>;
 
-  /** `false` when the user has no such transaction. Deletes exactly that one row. */
+  /**
+   * `false` when the user has no such transaction. Deletes exactly that one row.
+   * Throws `TransactionInUseError` when the transaction paid a bill.
+   */
   delete(userId: string, id: string): Promise<boolean>;
 }
