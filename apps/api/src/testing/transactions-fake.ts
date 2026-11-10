@@ -1,4 +1,4 @@
-import type { CategoryTotalResponse, TransactionResponse } from '@nestmint/shared';
+import type { CategoryTotalResponse, GroupMonthTotal, TransactionResponse } from '@nestmint/shared';
 import {
   type NewTransaction,
   type TransactionChange,
@@ -68,6 +68,28 @@ export class InMemoryTransactions implements TransactionsRepository {
     return this.own(userId)
       .filter((r) => r.occurredOn.startsWith(`${month}-`))
       .reduce((sum, r) => sum + r.amountMkd, 0);
+  }
+
+  async sumByGroupAndMonth(
+    userId: string,
+    fromMonth: string,
+    toMonth: string,
+  ): Promise<GroupMonthTotal[]> {
+    const totals = new Map<string, GroupMonthTotal>();
+    for (const r of this.own(userId)) {
+      const month = r.occurredOn.slice(0, 7);
+      if (month < fromMonth || month > toMonth) continue;
+      const group = this.groupOf(userId, r.categoryId);
+      const key = `${group.id}|${month}`;
+      const known = totals.get(key);
+      totals.set(key, {
+        month,
+        groupId: group.id,
+        groupName: group.name,
+        amountMkd: (known?.amountMkd ?? 0) + r.amountMkd,
+      });
+    }
+    return [...totals.values()];
   }
 
   async sumByCategory(userId: string, month: string): Promise<CategoryTotalResponse[]> {

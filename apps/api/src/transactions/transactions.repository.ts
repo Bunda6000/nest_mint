@@ -1,4 +1,9 @@
-import type { CategoryTotalResponse, TransactionKind, TransactionResponse } from '@nestmint/shared';
+import type {
+  CategoryTotalResponse,
+  GroupMonthTotal,
+  TransactionKind,
+  TransactionResponse,
+} from '@nestmint/shared';
 
 export const TRANSACTIONS_REPOSITORY = Symbol('TRANSACTIONS_REPOSITORY');
 
@@ -61,6 +66,17 @@ export interface TransactionsRepository {
    * A month with nothing spent is missing from the result.
    */
   sumByMonth(userId: string, fromMonth: string, toMonth: string): Promise<Record<string, number>>;
+
+  /**
+   * What the user spent in each category group in each month from `fromMonth` to `toMonth` (both
+   * "YYYY-MM", included), cash withdrawals included, so the amounts add up to `sumByMonth`. Only
+   * group-months with spending; archived groups included.
+   */
+  sumByGroupAndMonth(
+    userId: string,
+    fromMonth: string,
+    toMonth: string,
+  ): Promise<GroupMonthTotal[]>;
 
   /** `null` when the user has no such transaction. */
   find(userId: string, id: string): Promise<TransactionResponse | null>;

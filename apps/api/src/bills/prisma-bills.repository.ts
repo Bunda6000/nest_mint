@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { GroupMonthTotal } from '@nestmint/shared';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
@@ -102,6 +103,37 @@ export class PrismaBillsRepository implements BillsRepository {
       select,
     });
     return rows.map(toRecord);
+  }
+
+  async sumExpectedByGroupAndMonth(
+    userId: string,
+    fromMonth: string,
+    toMonth: string,
+  ): Promise<GroupMonthTotal[]> {
+    const rows = await this.prisma.bill.findMany({
+      where: { userId, periodMonth: { gte: toMonthStart(fromMonth), lte: toMonthStart(toMonth) } },
+      select: {
+        periodMonth: true,
+        expectedAmountMkd: true,
+        obligation: {
+          select: { category: { select: { group: { select: { id: true, name: true } } } } },
+        },
+      },
+    });
+    const totals = new Map<string, GroupMonthTotal>();
+    for (const row of rows) {
+      const group = row.obligation.category.group;
+      const month = row.periodMonth.toISOString().slice(0, 7);
+      const key = `${group.id}|${month}`;
+      const known = totals.get(key);
+      totals.set(key, {
+        month,
+        groupId: group.id,
+        groupName: group.name,
+        amountMkd: (known?.amountMkd ?? 0) + row.expectedAmountMkd,
+      });
+    }
+    return [...totals.values()];
   }
 
   async listUnpaid(userId: string): Promise<BillRecord[]> {

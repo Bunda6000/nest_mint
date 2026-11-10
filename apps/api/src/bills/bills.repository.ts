@@ -1,3 +1,5 @@
+import type { GroupMonthTotal } from '@nestmint/shared';
+
 export const BILLS_REPOSITORY = Symbol('BILLS_REPOSITORY');
 
 export interface NewBill {
@@ -68,6 +70,16 @@ export interface BillsRepository {
 
   /** The bills of one month, by due date, then by name. */
   listMonth(userId: string, month: string): Promise<BillRecord[]>;
+
+  /**
+   * The expected amounts of the bills of each category group in each month from `fromMonth` to
+   * `toMonth` (both "YYYY-MM", included), paid or not. Only group-months that have a bill.
+   */
+  sumExpectedByGroupAndMonth(
+    userId: string,
+    fromMonth: string,
+    toMonth: string,
+  ): Promise<GroupMonthTotal[]>;
 
   /** Every unpaid bill, soonest due first (then by name). */
   listUnpaid(userId: string): Promise<BillRecord[]>;

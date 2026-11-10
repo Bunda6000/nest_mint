@@ -7,6 +7,7 @@ import {
   type Payment,
   paymentNote,
 } from '../bills/bills.repository.js';
+import type { GroupMonthTotal } from '@nestmint/shared';
 import type { InMemoryObligations } from './obligations-fake.js';
 import type { InMemoryTransactions } from './transactions-fake.js';
 
@@ -36,6 +37,11 @@ export class InMemoryBills implements BillsRepository {
   constructor(
     private readonly obligations: InMemoryObligations,
     private readonly transactions: InMemoryTransactions,
+    /** Stands in for the category-to-group join the database does. */
+    private readonly groupOf: (
+      userId: string,
+      categoryId: string,
+    ) => { id: string; name: string } = () => ({ id: 'group-1', name: 'Group' }),
   ) {}
 
   async createMissing(userId: string, bills: NewBill[]): Promise<number> {
@@ -64,6 +70,28 @@ export class InMemoryBills implements BillsRepository {
 
   async listMonth(userId: string, month: string): Promise<BillRecord[]> {
     return this.records(userId, (r) => r.period === month);
+  }
+
+  async sumExpectedByGroupAndMonth(
+    userId: string,
+    fromMonth: string,
+    toMonth: string,
+  ): Promise<GroupMonthTotal[]> {
+    const totals = new Map<string, GroupMonthTotal>();
+    for (const r of this.rows.filter((x) => x.userId === userId)) {
+      if (r.period < fromMonth || r.period > toMonth) continue;
+      const obligation = this.obligations.rows.find((o) => o.id === r.obligationId)!;
+      const group = this.groupOf(userId, obligation.categoryId);
+      const key = `${group.id}|${r.period}`;
+      const known = totals.get(key);
+      totals.set(key, {
+        month: r.period,
+        groupId: group.id,
+        groupName: group.name,
+        amountMkd: (known?.amountMkd ?? 0) + r.expectedAmountMkd,
+      });
+    }
+    return [...totals.values()];
   }
 
   async listUnpaid(userId: string): Promise<BillRecord[]> {

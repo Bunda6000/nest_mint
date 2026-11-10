@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { CategoryTotalResponse, TransactionKind, TransactionResponse } from '@nestmint/shared';
+import type {
+  CategoryTotalResponse,
+  GroupMonthTotal,
+  TransactionKind,
+  TransactionResponse,
+} from '@nestmint/shared';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -147,6 +152,43 @@ export class PrismaTransactionsRepository implements TransactionsRepository {
       select,
     });
     return rows.map(toResponse);
+  }
+
+  async sumByGroupAndMonth(
+    userId: string,
+    fromMonth: string,
+    toMonth: string,
+  ): Promise<GroupMonthTotal[]> {
+    const days = await this.prisma.transaction.groupBy({
+      by: ['categoryId', 'occurredOn'],
+      _sum: { amountMkd: true },
+      where: {
+        userId,
+        occurredOn: { gte: monthRange(fromMonth).from, lt: monthRange(toMonth).to },
+      },
+    });
+    if (days.length === 0) return [];
+    const categories = await this.prisma.category.findMany({
+      where: { userId, id: { in: [...new Set(days.map((d) => d.categoryId))] } },
+      select: { id: true, group: { select: { id: true, name: true } } },
+    });
+    const groupOf = new Map(categories.map((c) => [c.id, c.group]));
+    const totals = new Map<string, GroupMonthTotal>();
+    for (const day of days) {
+      const group = groupOf.get(day.categoryId);
+      const amountMkd = day._sum.amountMkd ?? 0;
+      if (!group || amountMkd <= 0) continue;
+      const month = day.occurredOn.toISOString().slice(0, 7);
+      const key = `${group.id}|${month}`;
+      const known = totals.get(key);
+      totals.set(key, {
+        month,
+        groupId: group.id,
+        groupName: group.name,
+        amountMkd: (known?.amountMkd ?? 0) + amountMkd,
+      });
+    }
+    return [...totals.values()];
   }
 
   async sumByMonth(
