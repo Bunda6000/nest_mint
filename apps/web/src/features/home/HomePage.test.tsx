@@ -1,3 +1,4 @@
+import type { BillResponse } from '@nestmint/shared';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -71,7 +72,35 @@ const historyFor = (month: string) => ({
   })),
 });
 
-function fakeApi(months: Summary[] = [november(), october()]) {
+const bill = (
+  id: string,
+  name: string,
+  dueDate: string,
+  status: 'due' | 'overdue' = 'due',
+  amountMkd = 6_150,
+): BillResponse => ({
+  id,
+  obligationId: `o-${id}`,
+  obligationName: name,
+  payee: null,
+  categoryId: 'c1',
+  categoryName: 'Electricity',
+  period: dueDate.slice(0, 7),
+  dueDate,
+  expectedAmountMkd: amountMkd,
+  actualAmountMkd: null,
+  invoiceRef: null,
+  amountMkd,
+  status,
+  paidOn: null,
+  transactionId: null,
+});
+
+function fakeApi(months: Summary[] = [november(), october()], bills: BillResponse[] = []) {
+  const unpaid = [...bills];
+  const payCalls: { id: string; body: unknown }[] = [];
+  const failPayOnce = new Set<string>();
+  let failBillsOnce = false;
   const requested: string[] = [];
   const held = new Map<string, Promise<void>>();
   const failOnce = new Set<string>();
@@ -125,6 +154,34 @@ function fakeApi(months: Summary[] = [november(), october()]) {
         }
         return reply(200, months.find((m) => m.month === month) ?? summary(month, 0, 0));
       }
+      if (path === '/bills/sync' && method === 'POST') {
+        if (failBillsOnce) {
+          failBillsOnce = false;
+          return reply(500, {
+            error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' },
+          });
+        }
+        return reply(200, { created: 0 });
+      }
+      const inbox = /^\/bills\/inbox\?tab=(overdue|due)$/.exec(path);
+      if (inbox && method === 'GET') {
+        const tab = inbox[1] as 'overdue' | 'due';
+        const list = unpaid.filter((b) => b.status === tab);
+        return reply(200, { tab, bills: list, counts: { due: 0, overdue: 0, paid: 0 } });
+      }
+      const pay = /^\/bills\/([\w-]+)\/pay$/.exec(path);
+      if (pay && method === 'POST') {
+        const id = pay[1]!;
+        payCalls.push({ id, body: JSON.parse(String(init?.body ?? 'null')) });
+        if (failPayOnce.delete(id)) {
+          return reply(409, {
+            error: { code: 'BILL_ALREADY_PAID', message: 'That bill is already paid.' },
+          });
+        }
+        const index = unpaid.findIndex((b) => b.id === id);
+        if (index >= 0) unpaid.splice(index, 1);
+        return reply(200, { bill: { id } });
+      }
       throw new Error(`Unexpected API call: ${method} ${path}`);
     }),
   );
@@ -140,6 +197,11 @@ function fakeApi(months: Summary[] = [november(), october()]) {
       return release;
     },
     logoutCalls: () => logoutCalls,
+    payCalls,
+    failPay: (id: string) => failPayOnce.add(id),
+    failBills: () => {
+      failBillsOnce = true;
+    },
     failOnce: (month: string) => failOnce.add(month),
     /** The next request for this month waits until the returned function is called. */
     hold: (month: string) => {
@@ -162,8 +224,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function setup(months?: Summary[]) {
-  const api = fakeApi(months);
+function setup(months?: Summary[], bills?: BillResponse[]) {
+  const api = fakeApi(months, bills);
   const router = createMemoryRouter(routes, { initialEntries: ['/'] });
   const view = render(
     <AuthProvider>
@@ -584,5 +646,97 @@ describe('the rest of the page', () => {
     await user.click(screen.getByRole('button', { name: 'Log out' }));
     await waitFor(() => expect(api.logoutCalls()).toBe(1));
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Income' })).toBeNull());
+  });
+});
+
+describe('needs attention', () => {
+  const panel = () => screen.queryByRole('region', { name: 'Needs attention' });
+
+  it('shows nothing when no bill is overdue or due soon', async () => {
+    setup(undefined, [bill('b1', 'Heating', '2026-11-30')]);
+    await ready();
+    expect(panel()).toBeNull();
+  });
+
+  it('lists overdue bills and bills due within a week, but not later ones', async () => {
+    setup(undefined, [
+      bill('b1', 'Water', '2026-11-01', 'overdue'),
+      bill('b2', 'Electricity', '2026-11-12'),
+      bill('b3', 'Kindergarten', '2026-11-15'),
+      bill('b4', 'Heating', '2026-11-16'),
+    ]);
+    await ready();
+    const region = await screen.findByRole('region', { name: 'Needs attention' });
+    const items = within(region).getAllByRole('listitem');
+    expect(items.map((li) => li.querySelector('p')!.textContent)).toEqual([
+      'Water',
+      'Electricity',
+      'Kindergarten',
+    ]);
+    expect(items[0]!.textContent).toContain('7 days late');
+    expect(items[0]!.textContent).toContain('was due Nov 1');
+    expect(items[1]!.textContent).toContain('Due Nov 12');
+    expect(items[1]!.textContent).toContain('€100.00');
+  });
+
+  it('shows the amounts in the chosen currency', async () => {
+    const { user } = setup(undefined, [bill('b1', 'Water', '2026-11-10')]);
+    const region = await screen.findByRole('region', { name: 'Needs attention' });
+    expect(region.textContent).toContain('€100.00');
+    await user.click(toggle('MKD'));
+    expect(region.textContent).toContain('6,150 MKD');
+  });
+
+  it('pays a bill with one tap, takes it off the list and refreshes the numbers', async () => {
+    const { api, user } = setup(undefined, [
+      bill('b1', 'Water', '2026-11-01', 'overdue'),
+      bill('b2', 'Electricity', '2026-11-12'),
+    ]);
+    await ready();
+    await screen.findByRole('region', { name: 'Needs attention' });
+    const summaryCallsBefore = api.requested.length;
+
+    await user.click(screen.getByRole('button', { name: 'Mark Water as paid' }));
+
+    await waitFor(() => expect(api.payCalls).toEqual([{ id: 'b1', body: {} }]));
+    await waitFor(() => expect(screen.queryByText('Water')).toBeNull());
+    expect(screen.getByText('Electricity')).toBeTruthy();
+    await waitFor(() => expect(api.requested.length).toBeGreaterThan(summaryCallsBefore));
+  });
+
+  it('hides the panel once the last bill is paid', async () => {
+    const { user } = setup(undefined, [bill('b1', 'Water', '2026-11-10')]);
+    await user.click(await screen.findByRole('button', { name: 'Mark Water as paid' }));
+    await waitFor(() => expect(panel()).toBeNull());
+  });
+
+  it('keeps the bill and says why when paying fails', async () => {
+    const { api, user } = setup(undefined, [bill('b1', 'Water', '2026-11-10')]);
+    api.failPay('b1');
+    await user.click(await screen.findByRole('button', { name: 'Mark Water as paid' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('That bill is already paid.');
+    expect(screen.getByText('Water')).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: 'Mark Water as paid' }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it('says so when the bills cannot be checked, keeps the numbers, and a retry brings the list', async () => {
+    const { api, user } = setup(undefined, [bill('b1', 'Water', '2026-11-10')]);
+    api.failBills();
+    await ready();
+    expect(valueIn('Income')).toBe('€2,113.82');
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not check your bills');
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('region', { name: 'Needs attention' })).toBeTruthy();
+    expect(screen.getByText('Water')).toBeTruthy();
+  });
+});
+
+describe('navigation', () => {
+  it('links to the budget grid', async () => {
+    setup();
+    await ready();
+    expect(screen.getByRole('link', { name: 'Budget' }).getAttribute('href')).toBe('/budget');
   });
 });

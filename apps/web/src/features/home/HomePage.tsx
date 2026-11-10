@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { ChartsSection } from '../charts/ChartsSection';
 import { currentMonth, formatMonth, shiftMonth } from '../spending/months';
 import { type Currency, useCurrency } from './currency';
+import { AttentionPanel } from './AttentionPanel';
 import { amountChangeView, formatAmount, rateChangeView } from './kpi';
 import { KpiCard } from './KpiCard';
 
@@ -122,6 +123,8 @@ export function HomePage() {
         ))}
       </div>
 
+      <AttentionPanel currency={currency} onPaid={() => setAttempt((n) => n + 1)} />
+
       {load.status === 'loading' && (
         <p className="mt-6 text-gray-500" role="status">
           Loading…
@@ -188,7 +191,7 @@ export function HomePage() {
               Nothing recorded in {formatMonth(month)} yet.
             </p>
           )}
-          <ChartsSection key={month} month={month} currency={currency} />
+          <ChartsSection key={`${month}-${attempt}`} month={month} currency={currency} />
         </>
       )}
 
@@ -207,6 +210,9 @@ export function HomePage() {
         </Link>
         <Link to="/bills" className="text-emerald-700 underline">
           Bills
+        </Link>
+        <Link to="/budget" className="text-emerald-700 underline">
+          Budget
         </Link>
         <Link to="/categories" className="text-emerald-700 underline">
           Categories
