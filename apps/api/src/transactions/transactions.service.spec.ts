@@ -325,6 +325,18 @@ describe('deleteExpense', () => {
     expect((await failure(service.deleteExpense(A, 'tx-999'))).getStatus()).toBe(404);
   });
 
+  it('refuses to delete the expense of a paid bill, with a message that says what to do', async () => {
+    const saved = await service.createExpense(A, expense('Groceries', 1));
+    repository.locked.add(saved.id); // a bill points at it
+    const error = await failure(service.deleteExpense(A, saved.id));
+    expect(error.getStatus()).toBe(409);
+    expect(JSON.stringify(error.getResponse())).toContain('Undo the payment');
+    expect((await service.listRecent(A)).transactions).toHaveLength(1);
+    repository.locked.delete(saved.id); // the payment was undone
+    await service.deleteExpense(A, saved.id);
+    expect((await service.listRecent(A)).transactions).toHaveLength(0);
+  });
+
   it("refuses to delete another user's expense, which stays", async () => {
     const saved = await service.createExpense(A, expense('Groceries', 1));
     const error = await failure(service.deleteExpense(B, saved.id));

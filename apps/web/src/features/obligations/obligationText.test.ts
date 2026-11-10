@@ -1,6 +1,6 @@
 import type { ObligationResponse } from '@nestmint/shared';
 import { describe, expect, it } from 'vitest';
-import { describeObligation, describeWhen, formatDueDate } from './obligationText';
+import { describeLate, describeObligation, describeWhen, formatDueDate } from './obligationText';
 
 const base: ObligationResponse = {
   id: 'o1',
@@ -15,6 +15,7 @@ const base: ObligationResponse = {
   months: null,
   startMonth: '2026-01',
   endMonth: null,
+  createdMonth: '2026-11',
 };
 
 describe('describeWhen', () => {
@@ -59,5 +60,18 @@ describe('formatDueDate', () => {
     ['2026-12-31', 'Dec 31'],
   ])('%s → %s', (dueDate, expected) => {
     expect(formatDueDate({ dueDate })).toBe(expected);
+  });
+});
+
+describe('describeLate', () => {
+  it('is empty when the bill is not late yet', () => {
+    expect(describeLate('2026-11-15', '2026-11-01')).toBe('');
+    expect(describeLate('2026-11-15', '2026-11-15')).toBe('');
+  });
+
+  it('says 1 day late in the singular and N days late otherwise', () => {
+    expect(describeLate('2026-11-15', '2026-11-16')).toBe('1 day late');
+    expect(describeLate('2026-11-15', '2026-11-25')).toBe('10 days late');
+    expect(describeLate('2026-12-30', '2027-01-02')).toBe('3 days late');
   });
 });
