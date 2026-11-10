@@ -5,9 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { routes } from '../../routes';
 import { session } from '../../testing/mock-api';
 import { AuthProvider } from '../auth/AuthContext';
-import { currentMonth } from '../spending/months';
 
-const MONTH = currentMonth();
 // Real category ids are UUIDs, and the form refuses anything else.
 const ELECTRICITY_ID = '3f0f6c1e-8d6a-4b7e-9c55-0a1b2c3d4e51';
 const WATER_ID = '3f0f6c1e-8d6a-4b7e-9c55-0a1b2c3d4e52';
@@ -69,22 +67,6 @@ function fakeApi(initial: Obl[] = [electricity()]) {
   const reply = (status: number, body?: unknown) =>
     new Response(body === undefined ? null : JSON.stringify(body), { status });
 
-  const billsOf = () =>
-    data
-      .slice()
-      .sort((a, b) => a.dueDay - b.dueDay)
-      .map((o) => ({
-        id: `b-${o.id}`,
-        obligationId: o.id,
-        obligationName: o.name,
-        payee: o.payee,
-        categoryId: o.categoryId,
-        categoryName: o.categoryName,
-        period: MONTH,
-        dueDate: `${MONTH}-${String(o.dueDay).padStart(2, '0')}`,
-        expectedAmountMkd: o.expectedAmountMkd,
-      }));
-
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input).replace(/^.*\/api\/v1/, '');
     const method = init?.method ?? 'GET';
@@ -104,11 +86,6 @@ function fakeApi(initial: Obl[] = [electricity()]) {
     if (method === 'GET' && path === '/obligations') {
       return reply(200, { obligations: [...data].sort((a, b) => a.name.localeCompare(b.name)) });
     }
-    if (method === 'POST' && path === `/bills/generate?month=${MONTH}`) {
-      return reply(200, { month: MONTH, created: 0 });
-    }
-    if (method === 'GET' && path === `/bills?month=${MONTH}`)
-      return reply(200, { bills: billsOf() });
     if (method === 'POST' && path === '/obligations') {
       if (holdPost) {
         const gate = holdPost;
@@ -178,7 +155,7 @@ afterEach(() => {
 });
 
 async function loaded() {
-  await screen.findByRole('heading', { name: 'Recurring bills' });
+  await screen.findByRole('button', { name: 'Add a recurring bill' });
 }
 
 async function openAddForm(user: ReturnType<typeof userEvent.setup>) {
@@ -196,31 +173,21 @@ async function fillBasics(
 }
 
 describe('ObligationsPage: showing', () => {
-  it("creates this month's bills first, then shows them next to the recurring bills", async () => {
+  it('lists the recurring bills with how often they come, and does not touch the bills themselves', async () => {
     const api = fakeApi();
     renderPage();
     await loaded();
-
-    const order = api.paths();
-    expect(order.indexOf(`POST /bills/generate?month=${MONTH}`)).toBeGreaterThan(-1);
-    expect(order.indexOf(`POST /bills/generate?month=${MONTH}`)).toBeLessThan(
-      order.indexOf(`GET /bills?month=${MONTH}`),
-    );
-
-    const bills = screen.getByRole('region', { name: /Bills in/ });
-    expect(within(bills).getByText('Electricity')).toBeTruthy();
-    expect(within(bills).getByText(/Due .* 15 · EVN/)).toBeTruthy();
-    expect(within(bills).getByText(/Expected in total/).textContent).toContain('4,500');
     expect(
       screen.getByText(/Every month · due on the 15th · from January 2026 · ongoing/),
     ).toBeTruthy();
+    expect(api.paths().filter((p) => p.includes('/bills'))).toEqual([]);
+    expect(screen.getByRole('link', { name: '← Bills' }).getAttribute('href')).toBe('/bills');
   });
 
   it('shows friendly empty states', async () => {
     fakeApi([]);
     renderPage();
     await loaded();
-    expect(screen.getByText('No bills due this month.')).toBeTruthy();
     expect(screen.getByText(/No recurring bills yet/)).toBeTruthy();
   });
 
@@ -240,12 +207,12 @@ describe('ObligationsPage: showing', () => {
     const router = renderPage('/');
     const link = await screen.findByRole('link', { name: 'Bills' });
     await userEvent.setup().click(link);
-    await waitFor(() => expect(router.state.location.pathname).toBe('/obligations'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/bills'));
   });
 });
 
 describe('ObligationsPage: adding', () => {
-  it('saves a monthly bill and then shows its bill for this month', async () => {
+  it('saves a monthly bill and then shows it in the list', async () => {
     const api = fakeApi([]);
     renderPage();
     await loaded();
@@ -267,8 +234,7 @@ describe('ObligationsPage: adding', () => {
     });
     expect(api.posts()[0]!.body).not.toHaveProperty('everyNMonths');
     expect(api.posts()[0]!.body).not.toHaveProperty('months');
-    const bills = await screen.findByRole('region', { name: /Bills in/ });
-    await waitFor(() => expect(within(bills).getByText('Water')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Every month · due on the 10th/)).toBeTruthy());
     expect(screen.queryByRole('button', { name: 'Save bill' })).toBeNull();
   });
 
