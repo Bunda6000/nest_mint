@@ -1,3 +1,4 @@
+import { daysOverdue } from '@nestmint/finance-engine';
 import type { BillResponse, ObligationResponse } from '@nestmint/shared';
 import { ordinal } from '../income/incomeText';
 import { formatMonth } from '../spending/months';
@@ -35,4 +36,11 @@ export function describeObligation(obligation: ObligationResponse): string {
 export function formatDueDate(bill: Pick<BillResponse, 'dueDate'>): string {
   const month = Number(bill.dueDate.slice(5, 7));
   return `${MONTH_NAMES[month - 1]} ${Number(bill.dueDate.slice(8, 10))}`;
+}
+
+/** "1 day late" or "3 days late" for an unpaid bill; empty when it is not late yet. */
+export function describeLate(dueDate: string, today: string): string {
+  const days = daysOverdue(dueDate, today);
+  if (days === 0) return '';
+  return days === 1 ? '1 day late' : `${days} days late`;
 }
