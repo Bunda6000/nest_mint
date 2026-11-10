@@ -120,7 +120,11 @@ model Transaction {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// NoAction: a category in use cannot be deleted; deleting the whole user still works because both cascade.
   category Category @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+  /// The bill this expense paid, if any. Such an expense cannot be deleted until the payment is undone.
+  bill     Bill?
 
+  /// Lets a bill reference (expense, owner) together, so a bill can never point at another user's expense.
+  @@unique([id, userId])
   @@index([userId, occurredOn(sort: Desc)])
   @@map("transactions")
 }
@@ -205,13 +209,22 @@ model Bill {
   dueDate           DateTime @map("due_date") @db.Date
   /// What the obligation expected when this bill was created.
   expectedAmountMkd Int      @map("expected_amount_mkd")
+  /// The real amount from the invoice, once known; replaces the expected amount until the bill is paid.
+  actualAmountMkd   Int?     @map("actual_amount_mkd")
+  invoiceRef        String?  @map("invoice_ref")
+  /// The expense that records the payment. A bill is paid exactly when this is set; the paid day
+  /// and amount are the expense's own, so there is one place to correct them.
+  transactionId     String?  @map("transaction_id") @db.Uuid
   createdAt         DateTime @default(now()) @map("created_at")
 
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// NoAction: an obligation with bills cannot be deleted; deleting the whole user still works because both cascade.
-  obligation Obligation @relation(fields: [obligationId, userId], references: [id, userId], onDelete: NoAction)
+  obligation  Obligation   @relation(fields: [obligationId, userId], references: [id, userId], onDelete: NoAction)
+  /// NoAction: the expense of a paid bill cannot be deleted; the payment is undone first.
+  transaction Transaction? @relation(fields: [transactionId, userId], references: [id, userId], onDelete: NoAction)
 
   @@unique([obligationId, periodMonth])
+  @@unique([transactionId, userId])
   @@index([userId, periodMonth])
   @@map("bills")
 }
