@@ -1,4 +1,5 @@
 export * from './bill-status.js';
+export * from './budget-grid.js';
 export * from './exchange-rate.js';
 export * from './insights.js';
 export * from './money.js';
