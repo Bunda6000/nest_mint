@@ -3,6 +3,7 @@ import type {
   HistoryResponse,
   MonthBreakdownResponse,
   MonthSummaryResponse,
+  SavingsIdeasResponse,
 } from '@nestmint/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type E2eUser, E2eHarness } from '../testing/e2e.js';
@@ -331,6 +332,32 @@ describe.skipIf(!process.env.DATABASE_URL)('insights', () => {
       await salary(a, { amountMkd: 50_000, startMonth: '2026-06' });
       const june = (await history(a, '2026-06')).months[11]!;
       expect(june).toMatchObject({ incomeMkd: 50_000, expensesMkd: 0 });
+    });
+  });
+
+  describe('savings ideas', () => {
+    it('needs a login and a month', async () => {
+      await e2e.http().get('/api/v1/insights/ideas?month=2026-11').expect(401);
+      const user = await e2e.newUser();
+      await e2e.get('/insights/ideas', user).expect(400);
+    });
+
+    it("suggests a trim from the user's own past spending, with its calculation", async () => {
+      const user = await e2e.newUser();
+      await spend(user, 10_000, '2026-09-10', 'Restaurants');
+      await spend(user, 10_000, '2026-10-10', 'Restaurants');
+      const body = (await e2e.get('/insights/ideas?month=2026-11', user).expect(200))
+        .body as SavingsIdeasResponse;
+      expect(body.months).toEqual(['2026-09', '2026-10']);
+      const trim = body.ideas.find((i) => i.kind === 'trim')!;
+      expect(trim).toMatchObject({ categoryName: 'Restaurants', monthlyImpactMkd: 1_500 });
+      expect(trim.method).toContain('15% of 10,000 = 1,500');
+      expect(body.totalYearlyMkd).toBe(body.totalMonthlyMkd * 12);
+
+      const other = await e2e.newUser();
+      const empty = (await e2e.get('/insights/ideas?month=2026-11', other).expect(200))
+        .body as SavingsIdeasResponse;
+      expect(empty).toMatchObject({ ideas: [], months: [] });
     });
   });
 });

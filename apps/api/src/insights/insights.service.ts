@@ -1,9 +1,10 @@
-import { monthlyHistory, monthsEndingAt } from '@nestmint/finance-engine';
+import { monthlyHistory, monthsEndingAt, savingsIdeas, shiftMonth } from '@nestmint/finance-engine';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   HISTORY_MONTHS,
   type HistoryResponse,
   type MonthBreakdownResponse,
+  type SavingsIdeasResponse,
   TOP_EXPENSES,
 } from '@nestmint/shared';
 import { INCOME_REPOSITORY, type IncomeRepository } from '../income/income.repository.js';
@@ -45,5 +46,28 @@ export class InsightsService {
         savingsRate: m.savingsRate,
       })),
     };
+  }
+
+  /**
+   * Suggestions from the complete months before `month` (up to six that had spending), by the
+   * rules in the finance engine. Every idea says why and how its saving was worked out.
+   */
+  async ideas(userId: string, month: string): Promise<SavingsIdeasResponse> {
+    const window = monthsEndingAt(shiftMonth(month, -1), 6);
+    const rows = await Promise.all(window.map((m) => this.transactions.sumByCategory(userId, m)));
+    const byMonth = Object.fromEntries(
+      window.map((m, i) => [
+        m,
+        rows[i]!.map((r) => ({
+          categoryId: r.categoryId,
+          categoryName: r.categoryName,
+          amountMkd: r.amountMkd,
+        })),
+      ]),
+    );
+    const months = window.filter((m) => byMonth[m]!.length > 0);
+    const ideas = savingsIdeas(months, byMonth);
+    const totalMonthlyMkd = ideas.reduce((t, i) => t + i.monthlyImpactMkd, 0);
+    return { months, ideas, totalMonthlyMkd, totalYearlyMkd: totalMonthlyMkd * 12 };
   }
 }

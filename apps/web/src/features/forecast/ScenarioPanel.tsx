@@ -4,6 +4,7 @@ import { ApiError } from '../../api/client';
 import { formatMkd } from '../../format';
 import { useAuth } from '../auth/AuthContext';
 import { formatMonthYear } from '../goals/goalText';
+import type { IdeaPreset } from './SavingsIdeas';
 
 const parseInt10 = (value: string): number | null => {
   const cleaned = value.replace(/[ ,]/g, '');
@@ -12,13 +13,13 @@ const parseInt10 = (value: string): number | null => {
 };
 
 /** NM-61: "what happens if…": change income or spending and see the future recalculated. */
-export function ScenarioPanel({ months }: { months: number }) {
+export function ScenarioPanel({ months, preset }: { months: number; preset?: IdeaPreset }) {
   const { authedGet, authedSend } = useAuth();
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [incomePercent, setIncomePercent] = useState('');
   const [expenseChange, setExpenseChange] = useState('');
-  const [cutCategory, setCutCategory] = useState('');
-  const [cutAmount, setCutAmount] = useState('');
+  const [cutCategory, setCutCategory] = useState(preset?.categoryId ?? '');
+  const [cutAmount, setCutAmount] = useState(preset ? String(preset.amountMkd) : '');
   const [result, setResult] = useState<ScenarioResponse | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

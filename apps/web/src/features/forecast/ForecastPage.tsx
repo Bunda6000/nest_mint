@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { SavingsTrend } from '../charts/SavingsTrend';
 import { formatMonth } from '../spending/months';
 import { ScenarioPanel } from './ScenarioPanel';
+import { type IdeaPreset, SavingsIdeas } from './SavingsIdeas';
 
 const HORIZONS = [3, 6, 12, 24] as const;
 
@@ -18,6 +19,7 @@ export function ForecastPage() {
   const [months, setMonths] = useState<number>(12);
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const [preset, setPreset] = useState<{ key: number; value: IdeaPreset } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -113,7 +115,9 @@ export function ForecastPage() {
             />
           </div>
 
-          <ScenarioPanel months={months} />
+          <SavingsIdeas onTry={(value) => setPreset({ key: (preset?.key ?? 0) + 1, value })} />
+
+          <ScenarioPanel key={preset?.key ?? 0} months={months} preset={preset?.value} />
         </>
       )}
     </section>

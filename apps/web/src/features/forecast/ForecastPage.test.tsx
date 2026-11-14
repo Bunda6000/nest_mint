@@ -47,7 +47,26 @@ beforeEach(() => {
             },
           ],
         }
-      : forecast,
+      : path.startsWith('/insights/ideas')
+        ? {
+            months: ['2026-10'],
+            totalMonthlyMkd: 1_500,
+            totalYearlyMkd: 18_000,
+            ideas: [
+              {
+                id: 'trim:c1',
+                kind: 'trim',
+                categoryId: 'c1',
+                categoryName: 'Restaurants',
+                title: 'Spend 1,500 MKD less a month on Restaurants',
+                why: 'You spend about 10,000 MKD a month on Restaurants.',
+                method: '15% of 10,000 = 1,500 a month; × 12 = 18,000 a year.',
+                monthlyImpactMkd: 1_500,
+                yearlyImpactMkd: 18_000,
+              },
+            ],
+          }
+        : forecast,
   );
 });
 afterEach(() => {
@@ -123,5 +142,14 @@ describe('ForecastPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Calculate' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/whole denars/);
     expect(auth.authedSend).not.toHaveBeenCalled();
+  });
+
+  it('shows ideas with their calculation and can try one in the what-if', async () => {
+    renderPage();
+    expect(await screen.findByText(/15% of 10,000 = 1,500 a month/)).toBeTruthy();
+    expect(screen.getByLabelText('Savings ideas').textContent).toContain('18,000');
+    await userEvent.click(screen.getByRole('button', { name: /Try “Spend 1,500 MKD less/ }));
+    expect((screen.getByLabelText('By (MKD a month)') as HTMLInputElement).value).toBe('1500');
+    expect(((await screen.findByLabelText('Spend less on')) as HTMLSelectElement).value).toBe('c1');
   });
 });

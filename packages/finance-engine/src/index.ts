@@ -14,3 +14,4 @@ export * from './obligations.js';
 export * from './goals.js';
 export * from './health-score.js';
 export * from './forecast.js';
+export * from './savings-ideas.js';

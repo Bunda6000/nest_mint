@@ -42,3 +42,30 @@ export interface HistoryMonthResponse {
 export interface HistoryResponse {
   months: HistoryMonthResponse[];
 }
+
+export type SavingsIdeaKind = 'trim' | 'rising' | 'unusual' | 'top';
+
+/** One suggestion from the rules in the finance engine, always with the numbers behind it (NM-70). */
+export interface SavingsIdeaResponse {
+  id: string;
+  kind: SavingsIdeaKind;
+  categoryId: string;
+  categoryName: string;
+  title: string;
+  /** Why it was raised. */
+  why: string;
+  /** How the saving was worked out. */
+  method: string;
+  /** Per month, 0 for information only. */
+  monthlyImpactMkd: number;
+  yearlyImpactMkd: number;
+}
+
+export interface SavingsIdeasResponse {
+  /** The complete months the rules looked at, oldest first. */
+  months: string[];
+  ideas: SavingsIdeaResponse[];
+  /** Sum of the monthly impact of all ideas. */
+  totalMonthlyMkd: number;
+  totalYearlyMkd: number;
+}
