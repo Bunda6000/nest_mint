@@ -31,6 +31,7 @@ model User {
   incomes        Income[]
   obligations    Obligation[]
   bills          Bill[]
+  loanRateChanges LoanRateChange[]
 
   @@map("users")
 }
@@ -214,11 +215,34 @@ model Obligation {
   /// NoAction: a category in use cannot be deleted; deleting the whole user still works because both cascade.
   category Category @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
   bills    Bill[]
+  rateChanges LoanRateChange[]
 
   /// Lets bills reference (obligation, owner) together, so a bill can never point at another user's obligation.
   @@unique([id, userId])
   @@index([userId])
   @@map("obligations")
+}
+
+/// New terms of a loan from one month on: the rate and the monthly payment the bank asks for. The
+/// loan's own rate and payment are the terms of its first month. At most one change per loan and
+/// month; a second one for the same month replaces the first.
+model LoanRateChange {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  obligationId     String   @map("obligation_id") @db.Uuid
+  /// The first month the new terms apply: the first day of that month.
+  effectiveMonth   DateTime @map("effective_month") @db.Date
+  annualRateBp     Int      @map("annual_rate_bp")
+  monthlyPaymentMkd Int     @map("monthly_payment_mkd")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Cascade: the changes are details of the loan and go with it (deleting an obligation, NM-18).
+  obligation Obligation @relation(fields: [obligationId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@unique([obligationId, effectiveMonth])
+  @@index([userId])
+  @@map("loan_rate_changes")
 }
 
 /// One bill: an obligation's expected amount due in one month. Created from the obligation, at most

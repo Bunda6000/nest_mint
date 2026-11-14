@@ -4,6 +4,7 @@ import type {
   ObligationKind,
   ObligationRecurrence,
   ObligationResponse,
+  RateChangeResponse,
 } from '@nestmint/shared';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -31,6 +32,10 @@ const select = {
   annualRateBp: true,
   createdAt: true,
   category: { select: { name: true } },
+  rateChanges: {
+    select: { effectiveMonth: true, annualRateBp: true, monthlyPaymentMkd: true },
+    orderBy: { effectiveMonth: 'asc' },
+  },
 } as const;
 
 interface Row {
@@ -51,6 +56,7 @@ interface Row {
   annualRateBp: number | null;
   createdAt: Date;
   category: { name: string };
+  rateChanges: { effectiveMonth: Date; annualRateBp: number; monthlyPaymentMkd: number }[];
 }
 
 // A DATE column comes back as midnight UTC, so the first 7 characters are the month.
@@ -82,6 +88,11 @@ const toResponse = (row: Row): ObligationResponse => ({
           loanType: row.loanType,
           principalMkd: row.principalMkd,
           annualRateBp: row.annualRateBp,
+          rateChanges: row.rateChanges.map((c) => ({
+            effectiveMonth: month(c.effectiveMonth)!,
+            annualRateBp: c.annualRateBp,
+            monthlyPaymentMkd: c.monthlyPaymentMkd,
+          })),
         }
       : null,
 });
@@ -154,8 +165,39 @@ export class PrismaObligationsRepository implements ObligationsRepository {
           : {}),
         ...(change.everyNMonths !== undefined ? { everyNMonths: change.everyNMonths } : {}),
         ...(change.months !== undefined ? { months: change.months } : {}),
+        ...(change.loanType !== undefined ? { loanType: change.loanType } : {}),
+        ...(change.principalMkd !== undefined ? { principalMkd: change.principalMkd } : {}),
       },
     });
     return count === 0 ? null : this.find(userId, id);
+  }
+
+  async upsertRateChange(
+    userId: string,
+    id: string,
+    change: RateChangeResponse,
+  ): Promise<ObligationResponse | null> {
+    const owned = await this.prisma.obligation.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!owned) return null;
+    const effectiveMonth = toMonthStart(change.effectiveMonth);
+    await this.prisma.loanRateChange.upsert({
+      where: { obligationId_effectiveMonth: { obligationId: id, effectiveMonth } },
+      create: {
+        id: randomUUID(),
+        userId,
+        obligationId: id,
+        effectiveMonth,
+        annualRateBp: change.annualRateBp,
+        monthlyPaymentMkd: change.monthlyPaymentMkd,
+      },
+      update: {
+        annualRateBp: change.annualRateBp,
+        monthlyPaymentMkd: change.monthlyPaymentMkd,
+      },
+    });
+    return this.find(userId, id);
   }
 }

@@ -320,3 +320,79 @@ describe('createLoan', () => {
     expect(ENGINE_MAX_LOAN_RATE_BP).toBe(MAX_LOAN_RATE_BP);
   });
 });
+
+describe('update: loans', () => {
+  const makeLoan = () =>
+    service.createLoan(A, {
+      name: 'Mortgage',
+      lender: 'Komercijalna Banka',
+      loanType: 'housing',
+      principalMkd: 1_000_000,
+      annualRateBp: 600,
+      categoryId: categoryId('Electricity'),
+      dueDay: 5,
+      startMonth: '2026-01',
+      endMonth: '2035-12',
+    } as never);
+
+  it('changes the name, lender, type, principal, due day, category and last month', async () => {
+    const saved = await makeLoan();
+    const updated = await service.update(A, saved.id, {
+      name: 'Home loan',
+      payee: 'Stopanska Banka',
+      loanType: 'other',
+      principalMkd: 900_000,
+      dueDay: 10,
+      categoryId: categoryId('Water'),
+      endMonth: '2034-12',
+    });
+    expect(updated).toMatchObject({
+      name: 'Home loan',
+      payee: 'Stopanska Banka',
+      dueDay: 10,
+      categoryName: 'Water',
+      endMonth: '2034-12',
+      loan: { loanType: 'other', principalMkd: 900_000, annualRateBp: 600 },
+    });
+  });
+
+  it('keeps the payment and the rate: they change with a rate change, not by editing', async () => {
+    const saved = await makeLoan();
+    const error = await failure(service.update(A, saved.id, { expectedAmountMkd: 20_000 }));
+    expect(error.getStatus()).toBe(400);
+    expect(detailsOf(error)).toHaveProperty('expectedAmountMkd');
+    expect((await service.list(A)).obligations[0]!.expectedAmountMkd).toBe(11_102);
+  });
+
+  it('refuses to take away the lender or the last month', async () => {
+    const saved = await makeLoan();
+    const lender = await failure(service.update(A, saved.id, { payee: null }));
+    expect(detailsOf(lender)).toHaveProperty('payee');
+    const end = await failure(service.update(A, saved.id, { endMonth: null }));
+    expect(detailsOf(end)).toHaveProperty('endMonth');
+  });
+
+  it('refuses loan fields on a plain bill', async () => {
+    const bill = await service.create(A, monthly());
+    const type = await failure(service.update(A, bill.id, { loanType: 'consumer' }));
+    expect(detailsOf(type)).toHaveProperty('loanType');
+    const principal = await failure(service.update(A, bill.id, { principalMkd: 1_000 }));
+    expect(detailsOf(principal)).toHaveProperty('principalMkd');
+  });
+
+  it('refuses dates that would leave a rate change outside the loan', async () => {
+    const saved = await makeLoan();
+    await repository.upsertRateChange(A, saved.id, {
+      effectiveMonth: '2030-06',
+      annualRateBp: 700,
+      monthlyPaymentMkd: 12_000,
+    });
+    const end = await failure(service.update(A, saved.id, { endMonth: '2030-01' }));
+    expect(detailsOf(end)).toHaveProperty('endMonth');
+    const start = await failure(service.update(A, saved.id, { startMonth: '2031-01' }));
+    expect(start.getStatus()).toBe(400);
+    expect(
+      await service.update(A, saved.id, { endMonth: '2030-06', startMonth: '2030-06' }),
+    ).toMatchObject({ endMonth: '2030-06' });
+  });
+});

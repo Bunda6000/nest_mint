@@ -116,6 +116,17 @@ export class ObligationsService {
     if (input.months !== undefined && existing.recurrence !== 'custom_months') {
       throw invalid({ months: 'Only for bills in chosen months' });
     }
+    if (existing.loan) {
+      // A loan's payment and rate change with a rate change (from a month on), not by editing.
+      if (input.expectedAmountMkd !== undefined) {
+        throw invalid({ expectedAmountMkd: 'Change the payment with a rate change' });
+      }
+      if (input.payee === null) throw invalid({ payee: 'A loan needs a lender' });
+      if (input.endMonth === null) throw invalid({ endMonth: 'A loan needs a last month' });
+    } else {
+      if (input.loanType !== undefined) throw invalid({ loanType: 'Only for loans' });
+      if (input.principalMkd !== undefined) throw invalid({ principalMkd: 'Only for loans' });
+    }
 
     // The end must not come before the start, whichever of the two is being changed.
     const start = input.startMonth ?? existing.startMonth;
@@ -124,6 +135,19 @@ export class ObligationsService {
       throw invalid({
         [input.endMonth !== undefined ? 'endMonth' : 'startMonth']: END_BEFORE_START,
       });
+    }
+
+    // A loan's rate changes must stay inside its months.
+    if (existing.loan && end) {
+      const outside = existing.loan.rateChanges.find(
+        (c) => c.effectiveMonth < start || c.effectiveMonth > end,
+      );
+      if (outside) {
+        throw invalid({
+          [input.startMonth !== undefined ? 'startMonth' : 'endMonth']:
+            `A rate change from ${outside.effectiveMonth} would fall outside these dates`,
+        });
+      }
     }
 
     if (input.categoryId !== undefined && input.categoryId !== existing.categoryId) {
@@ -142,6 +166,8 @@ export class ObligationsService {
       ...(input.endMonth !== undefined ? { endMonth: input.endMonth } : {}),
       ...(input.everyNMonths !== undefined ? { everyNMonths: input.everyNMonths } : {}),
       ...(input.months !== undefined ? { months: input.months } : {}),
+      ...(input.loanType !== undefined ? { loanType: input.loanType } : {}),
+      ...(input.principalMkd !== undefined ? { principalMkd: input.principalMkd } : {}),
     };
     const updated = await this.obligations.update(userId, id, change);
     if (!updated) throw notFound('Obligation');

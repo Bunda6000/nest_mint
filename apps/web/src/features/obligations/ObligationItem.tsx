@@ -1,14 +1,18 @@
 import { convertMkdToEur } from '@nestmint/finance-engine';
 import type {
   CategoryGroupResponse,
+  CreateLoanData,
   CreateObligationData,
+  CreateRateChangeData,
   ObligationResponse,
 } from '@nestmint/shared';
 import { useState } from 'react';
 import { formatEurCents, formatMkd, localDay } from '../../format';
-import { describeLoan } from './loanText';
+import { LoanForm } from './LoanForm';
+import { currentLoanTerms, describeLoan, describeRateChange } from './loanText';
 import { ObligationForm } from './ObligationForm';
 import { describeObligation } from './obligationText';
+import { RateChangeForm } from './RateChangeForm';
 
 interface ObligationItemProps {
   obligation: ObligationResponse;
@@ -16,6 +20,8 @@ interface ObligationItemProps {
   /** Something else is being added or edited. */
   locked: boolean;
   onEdit: (values: CreateObligationData) => Promise<void>;
+  onEditLoan: (values: CreateLoanData) => Promise<void>;
+  onRateChange: (values: CreateRateChangeData) => Promise<void>;
   /** Called when this row starts or stops being edited. */
   onEditing: (editing: boolean) => void;
 }
@@ -29,9 +35,55 @@ export function ObligationItem({
   groups,
   locked,
   onEdit,
+  onEditLoan,
+  onRateChange,
   onEditing,
 }: ObligationItemProps) {
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<'view' | 'edit' | 'rate'>('view');
+  const editing = mode === 'edit';
+  const isLoan = obligation.kind === 'loan' && obligation.loan !== null;
+
+  const stop = () => {
+    setMode('view');
+    onEditing(false);
+  };
+  const start = (next: 'edit' | 'rate') => {
+    setMode(next);
+    onEditing(true);
+  };
+
+  if (editing && isLoan) {
+    return (
+      <li className="p-3">
+        <p className="mb-3 font-medium">Edit loan</p>
+        <LoanForm
+          groups={groups}
+          initial={obligation}
+          onSave={async (values) => {
+            await onEditLoan(values);
+            stop();
+          }}
+          onCancel={stop}
+        />
+      </li>
+    );
+  }
+
+  if (mode === 'rate' && isLoan) {
+    return (
+      <li className="p-3">
+        <p className="mb-3 font-medium">Rate change for {obligation.name}</p>
+        <RateChangeForm
+          loan={obligation}
+          onSave={async (values) => {
+            await onRateChange(values);
+            stop();
+          }}
+          onCancel={stop}
+        />
+      </li>
+    );
+  }
 
   if (editing) {
     return (
@@ -43,20 +95,21 @@ export function ObligationItem({
           submitLabel="Save changes"
           onSave={async (values) => {
             await onEdit(values);
-            setEditing(false);
-            onEditing(false);
+            stop();
           }}
-          onCancel={() => {
-            setEditing(false);
-            onEditing(false);
-          }}
+          onCancel={stop}
         />
       </li>
     );
   }
 
-  const euro = convertMkdToEur(obligation.expectedAmountMkd, localDay()).eurCents;
-  const label = `${obligation.name}, ${formatMkd(obligation.expectedAmountMkd)}`;
+  const today = localDay();
+  // A loan shows the payment in force now, which a rate change may have moved.
+  const payment = isLoan
+    ? currentLoanTerms(obligation, today.slice(0, 7)).monthlyPaymentMkd
+    : obligation.expectedAmountMkd;
+  const euro = convertMkdToEur(payment, today).eurCents;
+  const label = `${obligation.name}, ${formatMkd(payment)}`;
 
   return (
     <li className="p-3">
@@ -69,30 +122,40 @@ export function ObligationItem({
           {obligation.kind === 'loan' && obligation.loan && (
             <p className="text-xs text-gray-500">{describeLoan(obligation.loan)}</p>
           )}
+          {obligation.loan?.rateChanges.map((change) => (
+            <p key={change.effectiveMonth} className="text-xs text-gray-500">
+              {describeRateChange(change)}
+            </p>
+          ))}
           <p className="text-xs text-gray-500">{describeObligation(obligation)}</p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="font-medium">{formatMkd(obligation.expectedAmountMkd)}</p>
+          <p className="font-medium">{formatMkd(payment)}</p>
           <p className="text-xs text-gray-500">{formatEurCents(euro)}</p>
         </div>
       </div>
-      {/* A loan keeps its own fields (rate, principal); editing them comes with NM-15. */}
-      {obligation.kind !== 'loan' && (
-        <div className="mt-2 flex justify-end">
+      <div className="mt-2 flex justify-end gap-2">
+        {isLoan && (
           <button
             type="button"
             disabled={locked}
-            aria-label={`Edit ${label}`}
-            onClick={() => {
-              setEditing(true);
-              onEditing(true);
-            }}
+            aria-label={`Rate change for ${label}`}
+            onClick={() => start('rate')}
             className={small}
           >
-            Edit
+            Rate change
           </button>
-        </div>
-      )}
+        )}
+        <button
+          type="button"
+          disabled={locked}
+          aria-label={`Edit ${label}`}
+          onClick={() => start('edit')}
+          className={small}
+        >
+          Edit
+        </button>
+      </div>
     </li>
   );
 }

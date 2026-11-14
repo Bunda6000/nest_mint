@@ -45,3 +45,130 @@ export function annuityPaymentMkd(
   const monthlyRate = annualRateBp / 10_000 / 12;
   return Math.round((principalMkd * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -termMonths)));
 }
+
+/** The rate and the monthly payment of a loan, as they stand in some month. */
+export interface LoanTerms {
+  /** Yearly rate in basis points (450 = 4.50 %). */
+  annualRateBp: number;
+  /** The fixed payment per month, in whole denars. */
+  monthlyPaymentMkd: number;
+}
+
+/** New terms from a month on: the rate the lender announced and the payment the bank asks for. */
+export interface RateChange extends LoanTerms {
+  /** The first month the new terms apply, "YYYY-MM". */
+  effectiveMonth: string;
+}
+
+/**
+ * The terms in force in a month: those of the latest rate change that has started by then, or the
+ * loan's first terms before any change. The changes need not be sorted.
+ */
+export function loanTermsInMonth(
+  initial: LoanTerms,
+  changes: readonly RateChange[],
+  month: string,
+): LoanTerms {
+  assertMonth(month, 'month');
+  let current: LoanTerms = initial;
+  let currentFrom = '';
+  for (const change of changes) {
+    assertMonth(change.effectiveMonth, 'effectiveMonth');
+    if (change.effectiveMonth <= month && change.effectiveMonth >= currentFrom) {
+      current = change;
+      currentFrom = change.effectiveMonth;
+    }
+  }
+  return { annualRateBp: current.annualRateBp, monthlyPaymentMkd: current.monthlyPaymentMkd };
+}
+
+export interface LoanDefinition {
+  principalMkd: number;
+  /** First payment month, "YYYY-MM". */
+  startMonth: string;
+  /** Last payment month, "YYYY-MM". */
+  endMonth: string;
+  /** The terms from the first month. */
+  initial: LoanTerms;
+  changes: readonly RateChange[];
+}
+
+export interface LoanScheduleRow {
+  /** "YYYY-MM". */
+  month: string;
+  /** What was still owed at the start of the month. */
+  openingMkd: number;
+  /** The month's interest, rounded to a whole denar. */
+  interestMkd: number;
+  /** What is paid that month. */
+  paymentMkd: number;
+  /** What is still owed after the payment. */
+  closingMkd: number;
+}
+
+function nextMonth(month: string): string {
+  const year = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7));
+  return m === 12 ? `${year + 1}-01` : `${month.slice(0, 5)}${String(m + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Month by month: interest on what is owed, then the payment in force. A payment is never more than
+ * what is owed, so the loan ends when it is paid off, and the last month (the loan's end) pays
+ * whatever is left, which can differ a little from the regular payment (rounding) or be larger when
+ * the typed payments do not cover the interest. Rows stop once nothing is owed.
+ */
+export function loanSchedule(loan: LoanDefinition): LoanScheduleRow[] {
+  if (!Number.isInteger(loan.principalMkd) || loan.principalMkd < 1) {
+    throw new RangeError('principalMkd must be a whole number of at least 1');
+  }
+  const months = loanTermMonths(loan.startMonth, loan.endMonth);
+  const rows: LoanScheduleRow[] = [];
+  let owed = loan.principalMkd;
+  let month = loan.startMonth;
+  for (let i = 0; i < months && owed > 0; i += 1) {
+    const terms = loanTermsInMonth(loan.initial, loan.changes, month);
+    const interestMkd = Math.round((owed * terms.annualRateBp) / 120_000);
+    const dueMkd = owed + interestMkd;
+    const paymentMkd = i === months - 1 ? dueMkd : Math.min(terms.monthlyPaymentMkd, dueMkd);
+    rows.push({
+      month,
+      openingMkd: owed,
+      interestMkd,
+      paymentMkd,
+      closingMkd: dueMkd - paymentMkd,
+    });
+    owed = dueMkd - paymentMkd;
+    month = nextMonth(month);
+  }
+  return rows;
+}
+
+/** What is still owed at the start of a month (the whole principal before the loan starts). */
+export function balanceAtStartOfMonth(loan: LoanDefinition, month: string): number {
+  assertMonth(month, 'month');
+  if (month <= loan.startMonth) return loan.principalMkd;
+  const rows = loanSchedule(loan);
+  const row = rows.find((r) => r.month === month);
+  if (row) return row.openingMkd;
+  const last = rows[rows.length - 1];
+  return last ? last.closingMkd : loan.principalMkd;
+}
+
+/**
+ * A suggestion for the new payment of a rate change: the annuity payment that pays off what is
+ * still owed at the start of the effective month over the months left, at the new rate. The bank's
+ * own figure is what the user types; this is only a guide. `null` when nothing is left to pay.
+ */
+export function suggestedPaymentMkd(
+  loan: LoanDefinition,
+  effectiveMonth: string,
+  newRateBp: number,
+): number | null {
+  assertMonth(effectiveMonth, 'effectiveMonth');
+  if (effectiveMonth > loan.endMonth) return null;
+  const owed = balanceAtStartOfMonth(loan, effectiveMonth);
+  if (owed < 1) return null;
+  const from = effectiveMonth < loan.startMonth ? loan.startMonth : effectiveMonth;
+  return annuityPaymentMkd(owed, newRateBp, loanTermMonths(from, loan.endMonth));
+}

@@ -43,8 +43,13 @@ describe('formatRateBp', () => {
 
 describe('describeLoan', () => {
   it('names the type, the principal and the rate', () => {
-    expect(describeLoan({ loanType: 'housing', principalMkd: 3_000_000, annualRateBp: 350 })).toBe(
-      'Home loan · 3,000,000 MKD borrowed · 3.5 % a year',
-    );
+    expect(
+      describeLoan({
+        loanType: 'housing',
+        principalMkd: 3_000_000,
+        annualRateBp: 350,
+        rateChanges: [],
+      }),
+    ).toBe('Home loan · 3,000,000 MKD borrowed · 3.5 % a year');
   });
 });

@@ -26,13 +26,29 @@ export const MAX_LOAN_PRINCIPAL_MKD = 1_000_000_000;
 /** The highest yearly rate of a loan: 100.00 %, in basis points (1 bp = 0.01 %). */
 export const MAX_LOAN_RATE_BP = 10_000;
 
+/** New terms of a loan from one month on: the rate and the payment the bank asks for. */
+export interface RateChangeResponse {
+  /** The first month the new terms apply, "YYYY-MM". */
+  effectiveMonth: string;
+  /** The new yearly rate in basis points. */
+  annualRateBp: number;
+  /** The new monthly payment, in whole denars. */
+  monthlyPaymentMkd: number;
+}
+
 /** What makes a loan different from a bill. The lender is the obligation's `payee`. */
 export interface LoanDetails {
   loanType: LoanType;
   /** The amount borrowed, in whole denars. */
   principalMkd: number;
-  /** The yearly interest rate in basis points: 450 means 4.50 %. */
+  /** The yearly interest rate in basis points at the start: 450 means 4.50 %. */
   annualRateBp: number;
+  /**
+   * Later rate changes, oldest first. The obligation's `expectedAmountMkd` and `annualRateBp` here
+   * are the terms from the first month; the terms of any month come from the latest change that
+   * has started by then.
+   */
+  rateChanges: RateChangeResponse[];
 }
 
 /** An obligation as shown in lists. Amounts are whole denars. Fields of the other recurrences are null. */
@@ -196,10 +212,27 @@ export type CreateLoanInput = z.input<typeof createLoanSchema>;
 export type CreateLoanData = z.output<typeof createLoanSchema>;
 
 /**
+ * A rate change: from `effectiveMonth` on, the loan has this rate and this monthly payment (typed
+ * in from the bank's letter, not worked out). Months before it keep what they had. A second change
+ * for the same month replaces the first, which is how a mistake is corrected.
+ */
+export const createRateChangeSchema = z
+  .object({
+    effectiveMonth: monthSchema,
+    annualRateBp: createLoanSchema.shape.annualRateBp,
+    monthlyPaymentMkd: amountMkdSchema,
+  })
+  .strict();
+
+export type CreateRateChangeInput = z.input<typeof createRateChangeSchema>;
+export type CreateRateChangeData = z.output<typeof createRateChangeSchema>;
+
+/**
  * Change any of the fields. The recurrence cannot be changed (add a new obligation), and which
  * fields apply depends on it: the API refuses `months` on a monthly obligation and so on.
  * Bills that were already created keep their amount and due date. To end an obligation set
- * `endMonth`; to take the end away again set it to null; an empty payee clears it.
+ * `endMonth`; to take the end away again set it to null; an empty payee clears it. A loan's payment
+ * and rate are not changed here but with a rate change (`createRateChangeSchema`).
  */
 export const updateObligationSchema = z
   .object({
@@ -212,6 +245,10 @@ export const updateObligationSchema = z
     endMonth: monthSchema.nullable().optional(),
     everyNMonths: everyNMonthsSchema.optional(),
     months: monthsSchema.optional(),
+    /** Loans only. */
+    loanType: z.enum(LOAN_TYPES, { error: 'Choose the type of loan' }).optional(),
+    /** Loans only. */
+    principalMkd: createLoanSchema.shape.principalMkd.optional(),
   })
   .strict()
   .refine((value) => Object.values(value).some((field) => field !== undefined), {

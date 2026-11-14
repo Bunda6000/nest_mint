@@ -3,6 +3,7 @@ import { fieldErrors } from './auth/register.js';
 import { END_BEFORE_START } from './income.js';
 import {
   createLoanSchema,
+  createRateChangeSchema,
   createObligationSchema,
   MAX_OBLIGATION_NAME_LENGTH,
   MAX_PAYEE_LENGTH,
@@ -307,5 +308,44 @@ describe('createLoanSchema', () => {
 
   it('refuses fields it does not know', () => {
     expect(createLoanSchema.safeParse({ ...mortgage, recurrence: 'monthly' }).success).toBe(false);
+  });
+});
+
+describe('createRateChangeSchema', () => {
+  const change = { effectiveMonth: '2027-03', annualRateBp: 750, monthlyPaymentMkd: 12_400 };
+
+  it('accepts a month, a rate and a payment', () => {
+    expect(createRateChangeSchema.safeParse(change).success).toBe(true);
+    expect(createRateChangeSchema.safeParse({ ...change, annualRateBp: 0 }).success).toBe(true);
+  });
+
+  it.each([
+    ['effectiveMonth', { effectiveMonth: '2027-13' }],
+    ['effectiveMonth', { effectiveMonth: '2027-3' }],
+    ['annualRateBp', { annualRateBp: -1 }],
+    ['annualRateBp', { annualRateBp: 10_001 }],
+    ['annualRateBp', { annualRateBp: 7.5 }],
+    ['monthlyPaymentMkd', { monthlyPaymentMkd: 0 }],
+    ['monthlyPaymentMkd', { monthlyPaymentMkd: 12.5 }],
+  ])('refuses a bad %s', (field, over) => {
+    const result = createRateChangeSchema.safeParse({ ...change, ...over });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(Object.keys(fieldErrors(result.error))).toContain(field);
+  });
+
+  it('needs all three fields and refuses extra ones', () => {
+    for (const field of Object.keys(change) as (keyof typeof change)[]) {
+      expect(createRateChangeSchema.safeParse(without(change, field)).success).toBe(false);
+    }
+    expect(createRateChangeSchema.safeParse({ ...change, note: 'x' }).success).toBe(false);
+  });
+});
+
+describe('updateObligationSchema: loan fields', () => {
+  it('accepts a loan type and a principal, and refuses bad ones', () => {
+    expect(updateObligationSchema.safeParse({ loanType: 'consumer' }).success).toBe(true);
+    expect(updateObligationSchema.safeParse({ principalMkd: 900_000 }).success).toBe(true);
+    expect(updateObligationSchema.safeParse({ loanType: 'car' }).success).toBe(false);
+    expect(updateObligationSchema.safeParse({ principalMkd: 0 }).success).toBe(false);
   });
 });

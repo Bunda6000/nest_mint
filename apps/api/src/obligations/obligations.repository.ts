@@ -1,4 +1,10 @@
-import type { LoanDetails, ObligationRecurrence, ObligationResponse } from '@nestmint/shared';
+import type {
+  LoanDetails,
+  LoanType,
+  ObligationRecurrence,
+  ObligationResponse,
+  RateChangeResponse,
+} from '@nestmint/shared';
 
 export const OBLIGATIONS_REPOSITORY = Symbol('OBLIGATIONS_REPOSITORY');
 
@@ -18,7 +24,7 @@ export interface NewObligation {
   startMonth: string;
   endMonth: string | null;
   /** Set for a loan (the payee is then the lender); null for a plain bill. */
-  loan?: LoanDetails | null;
+  loan?: Omit<LoanDetails, 'rateChanges'> | null;
 }
 
 /** Only the fields that are present change. A `null` endMonth takes the end away, a `null` payee clears it. */
@@ -32,6 +38,10 @@ export interface ObligationChange {
   endMonth?: string | null;
   everyNMonths?: number;
   months?: number[];
+  /** Loans only. */
+  loanType?: LoanType;
+  /** Loans only. */
+  principalMkd?: number;
 }
 
 /**
@@ -50,4 +60,14 @@ export interface ObligationsRepository {
 
   /** `null` when the user has no such obligation. */
   update(userId: string, id: string, change: ObligationChange): Promise<ObligationResponse | null>;
+
+  /**
+   * Adds new terms to a loan from a month on; an existing change for the same month is replaced.
+   * `null` when the user has no such obligation (the service has checked it is a loan).
+   */
+  upsertRateChange(
+    userId: string,
+    id: string,
+    change: RateChangeResponse,
+  ): Promise<ObligationResponse | null>;
 }

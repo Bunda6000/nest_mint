@@ -1,4 +1,4 @@
-import type { ObligationResponse } from '@nestmint/shared';
+import type { ObligationResponse, RateChangeResponse } from '@nestmint/shared';
 import type {
   NewObligation,
   ObligationChange,
@@ -35,7 +35,7 @@ export class InMemoryObligations implements ObligationsRepository {
       endMonth: input.endMonth,
       createdMonth: this.createdMonth(),
       kind: input.loan ? 'loan' : 'bill',
-      loan: input.loan ? { ...input.loan } : null,
+      loan: input.loan ? { ...input.loan, rateChanges: [] } : null,
     };
     this.rows.push(row);
     return InMemoryObligations.response(row);
@@ -72,6 +72,22 @@ export class InMemoryObligations implements ObligationsRepository {
     if (change.endMonth !== undefined) row.endMonth = change.endMonth;
     if (change.everyNMonths !== undefined) row.everyNMonths = change.everyNMonths;
     if (change.months !== undefined) row.months = [...change.months];
+    if (row.loan && change.loanType !== undefined) row.loan.loanType = change.loanType;
+    if (row.loan && change.principalMkd !== undefined) row.loan.principalMkd = change.principalMkd;
+    return InMemoryObligations.response(row);
+  }
+
+  async upsertRateChange(
+    userId: string,
+    id: string,
+    change: RateChangeResponse,
+  ): Promise<ObligationResponse | null> {
+    const row = this.rows.find((r) => r.id === id && r.userId === userId);
+    if (!row || !row.loan) return null;
+    const others = row.loan.rateChanges.filter((c) => c.effectiveMonth !== change.effectiveMonth);
+    row.loan.rateChanges = [...others, { ...change }].sort((a, b) =>
+      a.effectiveMonth.localeCompare(b.effectiveMonth),
+    );
     return InMemoryObligations.response(row);
   }
 
@@ -91,7 +107,9 @@ export class InMemoryObligations implements ObligationsRepository {
       endMonth: row.endMonth,
       createdMonth: row.createdMonth,
       kind: row.kind,
-      loan: row.loan ? { ...row.loan } : null,
+      loan: row.loan
+        ? { ...row.loan, rateChanges: row.loan.rateChanges.map((c) => ({ ...c })) }
+        : null,
     };
   }
 }

@@ -164,6 +164,35 @@ export class PrismaBillsRepository implements BillsRepository {
     return row ? toRecord(row) : null;
   }
 
+  async setUnpaidExpectedAmounts(
+    userId: string,
+    obligationId: string,
+    fromMonth: string,
+    amountForPeriod: (period: string) => number,
+  ): Promise<number> {
+    return this.prisma.$transaction(async (tx) => {
+      const bills = await tx.bill.findMany({
+        where: {
+          userId,
+          obligationId,
+          transactionId: null,
+          periodMonth: { gte: toMonthStart(fromMonth) },
+        },
+        select: { id: true, periodMonth: true },
+      });
+      let changed = 0;
+      for (const bill of bills) {
+        // "transactionId: null" again: a bill paid a moment ago is left alone.
+        const { count } = await tx.bill.updateMany({
+          where: { id: bill.id, userId, transactionId: null },
+          data: { expectedAmountMkd: amountForPeriod(bill.periodMonth.toISOString().slice(0, 7)) },
+        });
+        changed += count;
+      }
+      return changed;
+    });
+  }
+
   async update(userId: string, id: string, change: BillChange): Promise<BillRecord | null> {
     // "transactionId: null" in the condition: a bill that was paid a moment ago is left alone.
     const { count } = await this.prisma.bill.updateMany({

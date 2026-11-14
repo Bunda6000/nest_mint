@@ -2,6 +2,7 @@ import type {
   CategoriesResponse,
   CreateLoanData,
   CreateObligationData,
+  CreateRateChangeData,
   ObligationsResponse,
 } from '@nestmint/shared';
 import { useEffect, useState } from 'react';
@@ -70,6 +71,26 @@ export function ObligationsPage() {
   async function addLoan(values: CreateLoanData) {
     await authedSend('POST', '/obligations/loans', values);
     setAdding(null);
+    reload();
+  }
+
+  async function editLoan(id: string, values: CreateLoanData) {
+    // The payment and rate change with a rate change, so they are not sent.
+    await authedSend('PATCH', `/obligations/${id}`, {
+      name: values.name,
+      payee: values.lender,
+      loanType: values.loanType,
+      principalMkd: values.principalMkd,
+      categoryId: values.categoryId,
+      dueDay: values.dueDay,
+      startMonth: values.startMonth,
+      endMonth: values.endMonth,
+    });
+    reload();
+  }
+
+  async function changeRate(id: string, values: CreateRateChangeData) {
+    await authedSend('POST', `/obligations/${id}/rate-changes`, values);
     reload();
   }
 
@@ -168,6 +189,8 @@ export function ObligationsPage() {
                   locked={busy}
                   onEditing={setEditing}
                   onEdit={(values) => edit(obligation.id, values)}
+                  onEditLoan={(values) => editLoan(obligation.id, values)}
+                  onRateChange={(values) => changeRate(obligation.id, values)}
                 />
               ))}
             </ul>

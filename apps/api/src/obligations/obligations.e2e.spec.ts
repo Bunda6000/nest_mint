@@ -1,4 +1,9 @@
-import type { CategoriesResponse, ObligationResponse, ObligationsResponse } from '@nestmint/shared';
+import type {
+  BillsResponse,
+  CategoriesResponse,
+  ObligationResponse,
+  ObligationsResponse,
+} from '@nestmint/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type E2eUser, E2eHarness } from '../testing/e2e.js';
 import { OBLIGATIONS_REPOSITORY, type ObligationsRepository } from './obligations.repository.js';
@@ -373,6 +378,126 @@ describe.skipIf(!process.env.DATABASE_URL)('obligations', () => {
           },
         }),
       ).rejects.toThrow();
+    });
+
+    describe('rate changes', () => {
+      const change = (over: Record<string, unknown> = {}) => ({
+        effectiveMonth: '2026-03',
+        annualRateBp: 700,
+        monthlyPaymentMkd: 16_000,
+        ...over,
+      });
+      const expectedIn = async (user: E2eUser, month: string) => {
+        await e2e.post(`/bills/generate?month=${month}`, user, {}).expect(200);
+        const list = (await e2e.get(`/bills?month=${month}`, user).expect(200))
+          .body as BillsResponse;
+        return list.bills.map((b) => b.expectedAmountMkd);
+      };
+
+      it('refuses the endpoint without a login', async () => {
+        await e2e.http().post('/api/v1/obligations/x/rate-changes').send({}).expect(401);
+      });
+
+      it('stores the change, updates unpaid bills from that month and keeps earlier ones', async () => {
+        const user = await e2e.newUser();
+        const saved = (
+          await e2e
+            .post('/obligations/loans', user, await loan(user, { monthlyPaymentMkd: 15_500 }))
+            .expect(201)
+        ).body as ObligationResponse;
+        expect(await expectedIn(user, '2026-02')).toEqual([15_500]);
+        expect(await expectedIn(user, '2026-03')).toEqual([15_500]);
+
+        const updated = (
+          await e2e.post(`/obligations/${saved.id}/rate-changes`, user, change()).expect(201)
+        ).body as ObligationResponse;
+        expect(updated.expectedAmountMkd).toBe(15_500);
+        expect(updated.loan!.rateChanges).toEqual([
+          { effectiveMonth: '2026-03', annualRateBp: 700, monthlyPaymentMkd: 16_000 },
+        ]);
+        expect(await expectedIn(user, '2026-02')).toEqual([15_500]);
+        expect(await expectedIn(user, '2026-03')).toEqual([16_000]);
+        expect(await expectedIn(user, '2026-04')).toEqual([16_000]);
+      });
+
+      it('replaces a change made twice for the same month', async () => {
+        const user = await e2e.newUser();
+        const saved = (await e2e.post('/obligations/loans', user, await loan(user)).expect(201))
+          .body as ObligationResponse;
+        await e2e.post(`/obligations/${saved.id}/rate-changes`, user, change()).expect(201);
+        const again = (
+          await e2e
+            .post(
+              `/obligations/${saved.id}/rate-changes`,
+              user,
+              change({ monthlyPaymentMkd: 15_900 }),
+            )
+            .expect(201)
+        ).body as ObligationResponse;
+        expect(again.loan!.rateChanges).toHaveLength(1);
+        expect(again.loan!.rateChanges[0]!.monthlyPaymentMkd).toBe(15_900);
+      });
+
+      it('answers 400, 404 and 409 for bad input, other users and plain bills', async () => {
+        const user = await e2e.newUser();
+        const other = await e2e.newUser();
+        const saved = (await e2e.post('/obligations/loans', user, await loan(user)).expect(201))
+          .body as ObligationResponse;
+        const response = await e2e
+          .post(
+            `/obligations/${saved.id}/rate-changes`,
+            user,
+            change({ effectiveMonth: '2025-01' }),
+          )
+          .expect(400);
+        expect(Object.keys(errorOf(response.body).details ?? {})).toContain('effectiveMonth');
+        await e2e
+          .post(`/obligations/${saved.id}/rate-changes`, user, change({ monthlyPaymentMkd: 0 }))
+          .expect(400);
+        await e2e.post(`/obligations/${saved.id}/rate-changes`, other, change()).expect(404);
+
+        const bill = (
+          await e2e
+            .post('/obligations', user, {
+              recurrence: 'monthly',
+              name: 'Water',
+              categoryId: await category(user, 'Water'),
+              expectedAmountMkd: 1_000,
+              dueDay: 3,
+              startMonth: '2026-01',
+            })
+            .expect(201)
+        ).body as ObligationResponse;
+        await e2e.post(`/obligations/${bill.id}/rate-changes`, user, change()).expect(409);
+      });
+
+      it('lets the database refuse a bad month, rate or payment, and removes changes with the loan', async () => {
+        const user = await e2e.newUser();
+        const saved = (await e2e.post('/obligations/loans', user, await loan(user)).expect(201))
+          .body as ObligationResponse;
+        const row = {
+          userId: user.id,
+          obligationId: saved.id,
+          effectiveMonth: new Date('2026-03-01T00:00:00Z'),
+          annualRateBp: 700,
+          monthlyPaymentMkd: 16_000,
+        };
+        for (const bad of [
+          { effectiveMonth: new Date('2026-03-15T00:00:00Z') },
+          { annualRateBp: 10_001 },
+          { monthlyPaymentMkd: 0 },
+        ]) {
+          await expect(
+            e2e.prisma.loanRateChange.create({ data: { ...row, ...bad } }),
+          ).rejects.toThrow();
+        }
+        await e2e.prisma.loanRateChange.create({ data: row });
+        await expect(e2e.prisma.loanRateChange.create({ data: row })).rejects.toThrow();
+        await e2e.prisma.obligation.delete({ where: { id: saved.id } });
+        expect(await e2e.prisma.loanRateChange.count({ where: { obligationId: saved.id } })).toBe(
+          0,
+        );
+      });
     });
   });
 });

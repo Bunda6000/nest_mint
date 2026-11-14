@@ -2,6 +2,7 @@ import { annuityPaymentMkd, convertMkdToEur, loanTermMonths } from '@nestmint/fi
 import {
   type CategoryGroupResponse,
   type CreateLoanData,
+  type ObligationResponse,
   createLoanSchema,
   fieldErrors,
   LOAN_TYPES,
@@ -18,6 +19,11 @@ import { LOAN_TYPE_LABELS, parseRatePercent } from './loanText';
 
 interface LoanFormProps {
   groups: CategoryGroupResponse[];
+  /**
+   * A loan to change. The payment box is then left out: a loan's payment and rate change with a
+   * rate change, not by editing.
+   */
+  initial?: ObligationResponse;
   /** Called with checked values. Throw the ApiError to show the server's message in the form. */
   onSave: (values: CreateLoanData) => Promise<void>;
   onCancel: () => void;
@@ -37,18 +43,23 @@ function FieldError({ message }: { message: string | undefined }) {
 }
 
 /** The loan fields. Leave the monthly payment empty and the app works it out. */
-export function LoanForm({ groups, onSave, onCancel }: LoanFormProps) {
+export function LoanForm({ groups, initial, onSave, onCancel }: LoanFormProps) {
   const today = localDay();
-  const [loanType, setLoanType] = useState<LoanType>('housing');
-  const [name, setName] = useState('');
-  const [lender, setLender] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [principalText, setPrincipalText] = useState('');
-  const [rateText, setRateText] = useState('');
+  const editing = initial !== undefined;
+  const [loanType, setLoanType] = useState<LoanType>(initial?.loan?.loanType ?? 'housing');
+  const [name, setName] = useState(initial?.name ?? '');
+  const [lender, setLender] = useState(initial?.payee ?? '');
+  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '');
+  const [principalText, setPrincipalText] = useState(
+    initial?.loan ? String(initial.loan.principalMkd) : '',
+  );
+  const [rateText, setRateText] = useState(
+    initial?.loan ? String(initial.loan.annualRateBp / 100) : '',
+  );
   const [paymentText, setPaymentText] = useState('');
-  const [dueDay, setDueDay] = useState('');
-  const [startMonth, setStartMonth] = useState(today.slice(0, 7));
-  const [endMonth, setEndMonth] = useState('');
+  const [dueDay, setDueDay] = useState(initial ? String(initial.dueDay) : '');
+  const [startMonth, setStartMonth] = useState(initial?.startMonth ?? today.slice(0, 7));
+  const [endMonth, setEndMonth] = useState(initial?.endMonth ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -206,22 +217,24 @@ export function LoanForm({ groups, onSave, onCancel }: LoanFormProps) {
           />
           <FieldError message={errors.principalMkd} />
         </div>
-        <div>
-          <label htmlFor="loan-rate" className={label}>
-            Yearly interest (%)
-          </label>
-          <input
-            id="loan-rate"
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            value={rateText}
-            onChange={(event) => setRateText(event.target.value)}
-            aria-invalid={errors.annualRateBp ? true : undefined}
-            className={input}
-          />
-          <FieldError message={errors.annualRateBp} />
-        </div>
+        {!editing && (
+          <div>
+            <label htmlFor="loan-rate" className={label}>
+              Yearly interest (%)
+            </label>
+            <input
+              id="loan-rate"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={rateText}
+              onChange={(event) => setRateText(event.target.value)}
+              aria-invalid={errors.annualRateBp ? true : undefined}
+              className={input}
+            />
+            <FieldError message={errors.annualRateBp} />
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -272,29 +285,37 @@ export function LoanForm({ groups, onSave, onCancel }: LoanFormProps) {
           />
           <FieldError message={errors.dueDay} />
         </div>
-        <div>
-          <label htmlFor="loan-payment" className={label}>
-            Monthly payment (MKD, optional)
-          </label>
-          <input
-            id="loan-payment"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            value={paymentText}
-            onChange={(event) => setPaymentText(event.target.value)}
-            aria-invalid={errors.monthlyPaymentMkd ? true : undefined}
-            aria-describedby="loan-payment-hint"
-            className={input}
-          />
-          <FieldError message={errors.monthlyPaymentMkd} />
-        </div>
+        {!editing && (
+          <div>
+            <label htmlFor="loan-payment" className={label}>
+              Monthly payment (MKD, optional)
+            </label>
+            <input
+              id="loan-payment"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={paymentText}
+              onChange={(event) => setPaymentText(event.target.value)}
+              aria-invalid={errors.monthlyPaymentMkd ? true : undefined}
+              aria-describedby="loan-payment-hint"
+              className={input}
+            />
+            <FieldError message={errors.monthlyPaymentMkd} />
+          </div>
+        )}
       </div>
-      <p id="loan-payment-hint" aria-live="polite" className="-mt-2 min-h-5 text-sm text-gray-500">
-        {shownPayment === null
-          ? 'Leave the payment empty and it is worked out from the amount, interest and dates.'
-          : `${estimate !== null ? 'Worked out: ' : 'Payment: '}${formatMkd(shownPayment)} a month (≈ ${formatEurCents(convertMkdToEur(shownPayment, today).eurCents)})`}
-      </p>
+      {!editing && (
+        <p
+          id="loan-payment-hint"
+          aria-live="polite"
+          className="-mt-2 min-h-5 text-sm text-gray-500"
+        >
+          {shownPayment === null
+            ? 'Leave the payment empty and it is worked out from the amount, interest and dates.'
+            : `${estimate !== null ? 'Worked out: ' : 'Payment: '}${formatMkd(shownPayment)} a month (≈ ${formatEurCents(convertMkdToEur(shownPayment, today).eurCents)})`}
+        </p>
+      )}
 
       {errors.form && (
         <p role="alert" className="text-sm text-red-700">
@@ -313,7 +334,7 @@ export function LoanForm({ groups, onSave, onCancel }: LoanFormProps) {
           disabled={saving}
           className="flex-1 rounded-lg bg-emerald-700 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Save loan'}
+          {saving ? 'Saving…' : editing ? 'Save changes' : 'Save loan'}
         </button>
         <button
           type="button"

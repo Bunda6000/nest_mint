@@ -6,6 +6,7 @@ import { IncomeModule } from './income/income.module.js';
 import { BillsModule } from './bills/bills.module.js';
 import { BudgetModule } from './budget/budget.module.js';
 import { InsightsModule } from './insights/insights.module.js';
+import { LoansModule } from './loans/loans.module.js';
 import { ObligationsModule } from './obligations/obligations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { SummaryModule } from './summary/summary.module.js';
@@ -23,6 +24,7 @@ import { TransactionsModule } from './transactions/transactions.module.js';
     InsightsModule,
     ObligationsModule,
     BillsModule,
+    LoansModule,
     BudgetModule,
   ],
 })

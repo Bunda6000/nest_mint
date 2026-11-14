@@ -1,4 +1,10 @@
-import type { LoanDetails, LoanType } from '@nestmint/shared';
+import { loanTermsInMonth } from '@nestmint/finance-engine';
+import type {
+  LoanDetails,
+  LoanType,
+  ObligationResponse,
+  RateChangeResponse,
+} from '@nestmint/shared';
 import { formatMkd } from '../../format';
 
 export const LOAN_TYPE_LABELS: Record<LoanType, string> = {
@@ -39,4 +45,22 @@ export function formatRateBp(basisPoints: number): string {
 /** The line under a loan's name: its type, what was borrowed and at what rate. */
 export function describeLoan(loan: LoanDetails): string {
   return `${LOAN_TYPE_LABELS[loan.loanType]} · ${formatMkd(loan.principalMkd)} borrowed · ${formatRateBp(loan.annualRateBp)} a year`;
+}
+
+/** The loan's rate and payment in force in a month: the latest rate change that has started. */
+export function currentLoanTerms(
+  obligation: Pick<ObligationResponse, 'expectedAmountMkd' | 'loan'>,
+  month: string,
+): { annualRateBp: number; monthlyPaymentMkd: number } {
+  const loan = obligation.loan;
+  const initial = {
+    annualRateBp: loan?.annualRateBp ?? 0,
+    monthlyPaymentMkd: obligation.expectedAmountMkd,
+  };
+  return loanTermsInMonth(initial, loan?.rateChanges ?? [], month);
+}
+
+/** "From 2026-10: 7 %, 16,000 MKD a month". */
+export function describeRateChange(change: RateChangeResponse): string {
+  return `From ${change.effectiveMonth}: ${formatRateBp(change.annualRateBp)}, ${formatMkd(change.monthlyPaymentMkd)} a month`;
 }

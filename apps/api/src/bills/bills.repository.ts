@@ -92,6 +92,18 @@ export interface BillsRepository {
   /** `null` when the user has no such bill. */
   find(userId: string, id: string): Promise<BillRecord | null>;
 
+  /**
+   * Gives the UNPAID bills of one obligation, from `fromMonth` on ("YYYY-MM"), the expected amount
+   * `amountForPeriod` returns for their month. Paid bills and the actual amounts (invoices) are not
+   * touched. Returns how many bills changed.
+   */
+  setUnpaidExpectedAmounts(
+    userId: string,
+    obligationId: string,
+    fromMonth: string,
+    amountForPeriod: (period: string) => number,
+  ): Promise<number>;
+
   /** Changes an UNPAID bill. `null` when the user has no such unpaid bill. */
   update(userId: string, id: string, change: BillChange): Promise<BillRecord | null>;
 

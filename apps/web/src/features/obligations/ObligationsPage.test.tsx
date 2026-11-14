@@ -24,7 +24,12 @@ interface Obl {
   startMonth: string;
   endMonth: string | null;
   kind?: 'bill' | 'loan';
-  loan?: { loanType: string; principalMkd: number; annualRateBp: number } | null;
+  loan?: {
+    loanType: string;
+    principalMkd: number;
+    annualRateBp: number;
+    rateChanges: { effectiveMonth: string; annualRateBp: number; monthlyPaymentMkd: number }[];
+  } | null;
 }
 
 const groups = [
@@ -140,10 +145,26 @@ function fakeApi(initial: Obl[] = [electricity()]) {
           loanType: String(body?.loanType),
           principalMkd: Number(body?.principalMkd),
           annualRateBp: Number(body?.annualRateBp),
+          rateChanges: [],
         },
       };
       data.push(created);
       return reply(201, created);
+    }
+    const rateMatch = /^\/obligations\/([^/]+)\/rate-changes$/.exec(path);
+    if (rateMatch && method === 'POST') {
+      const row = data.find((o) => o.id === rateMatch[1]);
+      if (!row?.loan)
+        return reply(404, { error: { code: 'NOT_FOUND', message: 'Obligation not found.' } });
+      row.loan.rateChanges = [
+        ...row.loan.rateChanges.filter((c) => c.effectiveMonth !== body?.effectiveMonth),
+        {
+          effectiveMonth: String(body?.effectiveMonth),
+          annualRateBp: Number(body?.annualRateBp),
+          monthlyPaymentMkd: Number(body?.monthlyPaymentMkd),
+        },
+      ];
+      return reply(200, row);
     }
     const match = /^\/obligations\/([^/]+)$/.exec(path);
     if (match && method === 'PATCH') {
@@ -167,6 +188,8 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       calls.filter((c) => c.path !== '/auth/refresh').map((c) => `${c.method} ${c.path}`),
     posts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations'),
     patches: () => calls.filter((c) => c.method === 'PATCH'),
+    rateChangePosts: () =>
+      calls.filter((c) => c.method === 'POST' && c.path.endsWith('/rate-changes')),
     loanPosts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations/loans'),
   };
 }
@@ -585,8 +608,7 @@ describe('ObligationsPage: loans', () => {
 
     expect(await screen.findByText(/Home loan · 1,000,000 MKD borrowed · 6 % a year/)).toBeTruthy();
     expect(screen.getAllByText('11,102 MKD').length).toBeGreaterThan(0);
-    // The calculated fields belong to the loan, so there is no bill editor on it.
-    expect(screen.queryByRole('button', { name: /Edit Mortgage/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /Rate change for Mortgage/ })).toBeTruthy();
   });
 
   it("sends the bank's payment when it is typed in, and updates the hint", async () => {
@@ -670,5 +692,116 @@ describe('ObligationsPage: loans', () => {
     expect(screen.getByRole('button', { name: 'Add a loan' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add a recurring bill' })).toBeTruthy();
     expect(api.loanPosts()).toHaveLength(0);
+  });
+});
+
+describe('ObligationsPage: changing a loan', () => {
+  const mortgage = (over: Partial<Obl> = {}): Obl => ({
+    id: 'loan1',
+    name: 'Mortgage',
+    payee: 'Komercijalna Banka',
+    categoryId: WATER_ID,
+    categoryName: 'Water',
+    expectedAmountMkd: 11_102,
+    dueDay: 5,
+    recurrence: 'monthly',
+    everyNMonths: null,
+    months: null,
+    startMonth: '2026-01',
+    endMonth: '2035-12',
+    kind: 'loan',
+    loan: { loanType: 'housing', principalMkd: 1_000_000, annualRateBp: 600, rateChanges: [] },
+    ...over,
+  });
+
+  it('records a rate change with the typed payment and shows it on the loan', async () => {
+    const api = fakeApi([mortgage()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Rate change for Mortgage/ }));
+    fireEvent.change(screen.getByLabelText(/New terms start in/), { target: { value: '2027-03' } });
+    await user.type(screen.getByLabelText(/New yearly interest/), '7,5');
+    await user.type(screen.getByLabelText(/New monthly payment/), '12400');
+    await user.click(screen.getByRole('button', { name: 'Save rate change' }));
+
+    await waitFor(() => expect(api.rateChangePosts()).toHaveLength(1));
+    expect(api.rateChangePosts()[0]!.path).toBe('/obligations/loan1/rate-changes');
+    expect(api.rateChangePosts()[0]!.body).toEqual({
+      effectiveMonth: '2027-03',
+      annualRateBp: 750,
+      monthlyPaymentMkd: 12_400,
+    });
+    expect(await screen.findByText(/From 2027-03: 7.5 %, 12,400 MKD a month/)).toBeTruthy();
+  });
+
+  it('suggests a payment as a hint only, and does not fill the box', async () => {
+    fakeApi([mortgage()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Rate change for Mortgage/ }));
+    fireEvent.change(screen.getByLabelText(/New terms start in/), { target: { value: '2030-01' } });
+    await user.type(screen.getByLabelText(/New yearly interest/), '6');
+    expect(screen.getByText(/For reference, .* about 11,1\d\d MKD/)).toBeTruthy();
+    expect((screen.getByLabelText(/New monthly payment/) as HTMLInputElement).value).toBe('');
+  });
+
+  it('asks for the payment and sends nothing without it', async () => {
+    const api = fakeApi([mortgage()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Rate change for Mortgage/ }));
+    await user.type(screen.getByLabelText(/New yearly interest/), '7');
+    await user.click(screen.getByRole('button', { name: 'Save rate change' }));
+    expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
+    expect(api.rateChangePosts()).toHaveLength(0);
+  });
+
+  it('shows the payment in force now on the loan row', async () => {
+    fakeApi([
+      mortgage({
+        loan: {
+          loanType: 'housing',
+          principalMkd: 1_000_000,
+          annualRateBp: 600,
+          rateChanges: [
+            { effectiveMonth: '2026-01', annualRateBp: 700, monthlyPaymentMkd: 12_000 },
+          ],
+        },
+      }),
+    ]);
+    renderPage();
+    await loaded();
+    expect(screen.getAllByText('12,000 MKD').length).toBeGreaterThan(0);
+  });
+
+  it('edits the loan without sending the payment or the rate', async () => {
+    const api = fakeApi([mortgage()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /^Edit Mortgage/ }));
+    expect(screen.queryByLabelText(/Monthly payment/)).toBeNull();
+    expect(screen.queryByLabelText(/Yearly interest/)).toBeNull();
+    const name = screen.getByLabelText('Name');
+    await user.clear(name);
+    await user.type(name, 'Home loan');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(api.patches()).toHaveLength(1));
+    const body = api.patches()[0]!.body!;
+    expect(api.patches()[0]!.path).toBe('/obligations/loan1');
+    expect(body).toMatchObject({
+      name: 'Home loan',
+      payee: 'Komercijalna Banka',
+      loanType: 'housing',
+      principalMkd: 1_000_000,
+      endMonth: '2035-12',
+    });
+    expect(body).not.toHaveProperty('expectedAmountMkd');
+    expect(body).not.toHaveProperty('annualRateBp');
+    expect(body).not.toHaveProperty('monthlyPaymentMkd');
   });
 });

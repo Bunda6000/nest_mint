@@ -14,6 +14,7 @@ import {
   type BillStatus,
   ErrorCode,
   type GenerateBillsResponse,
+  type ObligationResponse,
   PAID_TAB_LIMIT,
   type PayBillData,
   type PayBillsData,
@@ -22,6 +23,7 @@ import {
 } from '@nestmint/shared';
 import { ApiException } from '../common/api.exception.js';
 import { Clock } from '../common/clock.js';
+import { expectedAmountInMonth } from '../obligations/loan-terms.js';
 import {
   OBLIGATIONS_REPOSITORY,
   type ObligationsRepository,
@@ -241,14 +243,15 @@ function scheduleOf(o: {
   };
 }
 
+/** A loan's bill expects the payment in force in its month, so a rate change reaches only later months. */
 const newBill = (
-  o: { id: string; dueDay: number; expectedAmountMkd: number },
+  o: Pick<ObligationResponse, 'id' | 'dueDay' | 'expectedAmountMkd' | 'loan'>,
   month: string,
 ): NewBill => ({
   obligationId: o.id,
   period: month,
   dueDate: dueDateInMonth(month, o.dueDay),
-  expectedAmountMkd: o.expectedAmountMkd,
+  expectedAmountMkd: expectedAmountInMonth(o, month),
 });
 
 const amountsOf = (r: BillRecord) => ({
