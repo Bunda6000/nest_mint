@@ -16,3 +16,4 @@ export * from './goals.js';
 export * from './health-score.js';
 export * from './forecast.js';
 export * from './coach.js';
+export * from './auth/password-reset.js';

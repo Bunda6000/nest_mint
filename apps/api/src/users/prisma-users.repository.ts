@@ -26,6 +26,10 @@ export class PrismaUsersRepository implements UsersRepository {
     return rows.map((r) => r.id);
   }
 
+  async setPasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.prisma.user.update({ where: { id }, data: { passwordHash } });
+  }
+
   async create(user: NewUser): Promise<User> {
     try {
       return await this.prisma.user.create({ data: user, select: userFields });

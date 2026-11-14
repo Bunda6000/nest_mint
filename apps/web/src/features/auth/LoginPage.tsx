@@ -71,6 +71,11 @@ export function LoginPage() {
           {submitting ? 'Logging in…' : 'Log in'}
         </button>
       </form>
+      <p className="mt-4 text-sm">
+        <Link to="/forgot-password" className="text-emerald-700 underline">
+          Forgot your password?
+        </Link>
+      </p>
       <p className="mt-6 text-sm text-gray-600">
         No account yet?{' '}
         <Link to="/register" className="text-emerald-700 underline">

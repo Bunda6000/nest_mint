@@ -1,6 +1,10 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import {
   type LoginData,
+  type PasswordResetConfirmData,
+  passwordResetConfirmSchema,
+  type PasswordResetRequestData,
+  passwordResetRequestSchema,
   loginSchema,
   type RegisterData,
   registerSchema,
@@ -12,6 +16,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { AuthConfig } from './auth.config.js';
 import { AuthService } from './auth.service.js';
 import { OriginGuard } from './origin.guard.js';
+import { PasswordResetService } from './password-reset.service.js';
 import { Public } from './public.decorator.js';
 import { clearRefreshCookie, readRefreshCookie, setRefreshCookie } from './refresh-cookie.js';
 import { type IssuedSession, SessionService } from './session.service.js';
@@ -25,6 +30,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
     private readonly config: AuthConfig,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
   @Post('register')
@@ -44,6 +50,26 @@ export class AuthController {
   ): Promise<SessionResponse> {
     const user = await this.auth.authenticate(body, clientIp(req));
     return this.respondWith(res, await this.sessions.start(user));
+  }
+
+  /** Always 204, whether or not the email has an account. */
+  @Post('password-reset/request')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async requestReset(
+    @Body(new ZodValidationPipe<PasswordResetRequestData>(passwordResetRequestSchema))
+    body: PasswordResetRequestData,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.passwordReset.request(body.email, clientIp(req));
+  }
+
+  @Post('password-reset/confirm')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async confirmReset(
+    @Body(new ZodValidationPipe<PasswordResetConfirmData>(passwordResetConfirmSchema))
+    body: PasswordResetConfirmData,
+  ): Promise<void> {
+    await this.passwordReset.confirm(body.token, body.password);
   }
 
   @Post('refresh')

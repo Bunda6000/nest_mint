@@ -37,6 +37,11 @@ export class InMemoryUsers implements UsersRepository {
     return this.rows.map((u) => u.id);
   }
 
+  async setPasswordHash(id: string, passwordHash: string): Promise<void> {
+    const row = this.rows.find((u) => u.id === id);
+    if (row) row.passwordHash = passwordHash;
+  }
+
   async create(user: NewUser): Promise<User> {
     if (this.raceOnCreate) throw new DuplicateEmailError();
     const row: User = { id: `id-${this.rows.length + 1}`, displayName: null, ...user };
