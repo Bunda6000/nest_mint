@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { convertMkdToEur, setRates } from '../../rates';
 import { SettingsPage } from './SettingsPage';
 
-const auth = vi.hoisted(() => ({ authedGet: vi.fn(), authedSend: vi.fn() }));
+const auth = vi.hoisted(() => ({
+  authedGet: vi.fn(),
+  authedSend: vi.fn(),
+  logoutEverywhere: vi.fn(),
+}));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => auth }));
 
 const data = (rates: ExchangeRatesResponse['rates']): ExchangeRatesResponse => ({
@@ -66,5 +70,16 @@ describe('SettingsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Save rate' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Enter the rate');
     expect(auth.authedSend).not.toHaveBeenCalled();
+  });
+
+  it('logs out everywhere on request', async () => {
+    auth.logoutEverywhere.mockResolvedValue(undefined);
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Log out everywhere' }));
+    expect(auth.logoutEverywhere).toHaveBeenCalledTimes(1);
   });
 });

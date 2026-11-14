@@ -30,5 +30,6 @@ import { SessionService } from './session.service.js';
     PasswordHasher,
     SessionService,
   ],
+  exports: [SessionService],
 })
 export class AuthModule {}

@@ -639,8 +639,8 @@ describe('the rest of the page', () => {
         <RouterProvider router={router} />
       </AuthProvider>,
     );
-    expect((await screen.findByRole('status')).textContent).toBe('Loading…');
-    expect(screen.getByRole('link', { name: 'Add expense' })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Add expense' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('Loading…');
   });
 
   it('logs out', async () => {

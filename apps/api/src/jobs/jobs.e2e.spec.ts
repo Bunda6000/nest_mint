@@ -42,7 +42,12 @@ describe.skipIf(!process.env.DATABASE_URL)('monthly job', () => {
 
     const run = () =>
       e2e.http().get('/api/v1/jobs/monthly').set('Authorization', `Bearer ${SECRET}`).expect(200);
-    const first = (await run()).body as { billsCreated: number; failed: number };
+    const first = (await run()).body as {
+      billsCreated: number;
+      failed: number;
+      tokensDeleted: number;
+    };
+    expect(first.tokensDeleted).toBeGreaterThanOrEqual(0);
     expect(first.failed).toBe(0);
     const again = (await run()).body as { billsCreated: number };
     expect(again.billsCreated).toBe(0);

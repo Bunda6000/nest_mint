@@ -18,6 +18,8 @@ import {
  */
 export const ROTATION_GRACE_MS = 10_000;
 
+export const STALE_TOKEN_DAYS = 30;
+
 export interface IssuedSession {
   session: SessionResponse;
   refreshToken: string;
@@ -76,6 +78,17 @@ export class SessionService {
     if (record && !record.revokedAt) {
       await this.tokens.revoke(record.id, 'logout', this.clock.now());
     }
+  }
+
+  /** Ends every session of the user (NM-41); their access tokens run out on their own within minutes. */
+  async endAll(userId: string): Promise<void> {
+    await this.tokens.revokeAllForUser(userId, 'logout_all', this.clock.now());
+  }
+
+  /** Deletes login tokens that expired or were revoked more than `STALE_TOKEN_DAYS` days ago (NM-43). */
+  async deleteStaleTokens(): Promise<number> {
+    const before = new Date(this.clock.now().getTime() - STALE_TOKEN_DAYS * 24 * 60 * 60 * 1000);
+    return this.tokens.deleteStale(before);
   }
 
   private async issue(user: User): Promise<IssuedSession> {

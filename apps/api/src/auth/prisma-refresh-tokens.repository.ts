@@ -27,6 +27,13 @@ export class PrismaRefreshTokensRepository implements RefreshTokensRepository {
     });
   }
 
+  async deleteStale(before: Date): Promise<number> {
+    const result = await this.prisma.refreshToken.deleteMany({
+      where: { OR: [{ expiresAt: { lt: before } }, { revokedAt: { lt: before } }] },
+    });
+    return result.count;
+  }
+
   async revokeAllForUser(userId: string, reason: RevokeReason, at: Date): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },

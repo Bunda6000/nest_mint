@@ -19,6 +19,8 @@ interface AuthContextValue {
   state: AuthState;
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
+  /** Ends every session of the user, on all devices, then leaves the app. */
+  logoutEverywhere: () => Promise<void>;
   /**
    * GET with the access token. If the token has expired (15 minutes), the session is renewed from
    * the refresh cookie and the request is retried once; if that fails the user is logged out.
@@ -119,9 +121,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [authed],
   );
 
+  const logoutEverywhere = useCallback(async () => {
+    await authedSend<null>('POST', '/me/logout-all');
+    setState({ status: 'anonymous' });
+  }, [authedSend]);
+
   const value = useMemo(
-    () => ({ state, login, logout, authedGet, authedSend }),
-    [state, login, logout, authedGet, authedSend],
+    () => ({ state, login, logout, logoutEverywhere, authedGet, authedSend }),
+    [state, login, logout, logoutEverywhere, authedGet, authedSend],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

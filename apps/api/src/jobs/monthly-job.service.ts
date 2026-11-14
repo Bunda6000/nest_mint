@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { SessionService } from '../auth/session.service.js';
 import { BillsService } from '../bills/bills.service.js';
 import { USERS_REPOSITORY, type UsersRepository } from '../users/users.repository.js';
 
@@ -7,6 +8,8 @@ export interface MonthlyJobResult {
   billsCreated: number;
   /** Users whose run failed; the others were not affected. */
   failed: number;
+  /** Old login tokens removed (NM-43). */
+  tokensDeleted: number;
 }
 
 @Injectable()
@@ -16,6 +19,7 @@ export class MonthlyJobService {
   constructor(
     @Inject(USERS_REPOSITORY) private readonly users: UsersRepository,
     private readonly bills: BillsService,
+    private readonly sessions: SessionService,
   ) {}
 
   /**
@@ -35,9 +39,16 @@ export class MonthlyJobService {
         this.logger.error(`Monthly job failed for a user: ${(error as Error).message}`);
       }
     }
+    let tokensDeleted = 0;
+    try {
+      tokensDeleted = await this.sessions.deleteStaleTokens();
+    } catch (error) {
+      failed += 1;
+      this.logger.error(`Token cleanup failed: ${(error as Error).message}`);
+    }
     this.logger.log(
-      `Monthly job: ${ids.length} users, ${billsCreated} bills created, ${failed} failed`,
+      `Monthly job: ${ids.length} users, ${billsCreated} bills created, ${tokensDeleted} old tokens deleted, ${failed} failed`,
     );
-    return { users: ids.length, billsCreated, failed };
+    return { users: ids.length, billsCreated, failed, tokensDeleted };
   }
 }

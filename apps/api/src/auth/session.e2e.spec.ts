@@ -91,6 +91,31 @@ describe.skipIf(!process.env.DATABASE_URL)('login, refresh, logout and /me', () 
     await http().get('/api/v1/me').set('Authorization', 'Bearer garbage').expect(401);
   });
 
+  it("logs out everywhere: every device's refresh token stops working", async () => {
+    const email = await newUser();
+    const phone = await login(email);
+    const laptop = await login(email);
+    const token = (phone.response.body as SessionResponse).accessToken;
+
+    await http().post('/api/v1/me/logout-all').expect(401);
+    await http().post('/api/v1/me/logout-all').set('Authorization', `Bearer ${token}`).expect(204);
+
+    for (const { cookie } of [phone, laptop]) {
+      await http()
+        .post('/api/v1/auth/refresh')
+        .set('Origin', WEB_ORIGIN)
+        .set('Cookie', cookieHeader(cookie))
+        .expect(401);
+    }
+    // Another user is not affected.
+    const other = await login(await newUser());
+    await http()
+      .post('/api/v1/auth/refresh')
+      .set('Origin', WEB_ORIGIN)
+      .set('Cookie', cookieHeader(other.cookie))
+      .expect(200);
+  });
+
   it('keeps health public', async () => {
     await http().get('/api/v1/health').expect(200);
   });

@@ -11,7 +11,8 @@ type Load =
 
 /** NM-36: euro amounts are denars ÷ the rate in force on the day. Add a rate from a date onward. */
 export function SettingsPage() {
-  const { authedGet, authedSend } = useAuth();
+  const { authedGet, authedSend, logoutEverywhere } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [day, setDay] = useState(localDay());
@@ -153,6 +154,26 @@ export function SettingsPage() {
           </form>
         </>
       )}
+
+      <h2 className="mt-8 text-xl font-semibold text-gray-900">Security</h2>
+      <p className="mt-1 text-sm text-gray-600">
+        Lost a device or used a shared computer? This logs you out on every device, including this
+        one.
+      </p>
+      <button
+        type="button"
+        disabled={loggingOut}
+        onClick={() => {
+          setLoggingOut(true);
+          logoutEverywhere().catch(() => {
+            setLoggingOut(false);
+            setProblem('Could not log you out everywhere. Please try again.');
+          });
+        }}
+        className="mt-3 rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:opacity-60"
+      >
+        Log out everywhere
+      </button>
     </section>
   );
 }

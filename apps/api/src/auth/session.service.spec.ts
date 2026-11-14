@@ -94,4 +94,30 @@ describe('SessionService', () => {
     expect(status(await service.refresh(issued.refreshToken).catch((e: unknown) => e))).toBe(401);
     expect(tokens.active('id-1')).toBe(0);
   });
+
+  it('endAll revokes every active token of that user only', async () => {
+    await users.create({ email: 'other@example.com', passwordHash: 'unused' });
+    await service.start(user());
+    await service.start(user());
+    await service.start(users.rows[1]!);
+
+    await service.endAll('id-1');
+
+    expect(tokens.active('id-1')).toBe(0);
+    expect(tokens.active('id-2')).toBe(1);
+    expect(
+      tokens.rows.filter((r) => r.userId === 'id-1').every((r) => r.revokeReason === 'logout_all'),
+    ).toBe(true);
+  });
+
+  it('deleteStaleTokens removes tokens expired or revoked over 30 days ago, keeps the rest', async () => {
+    const old = await service.start(user());
+    await service.end(old.refreshToken); // revoked now
+    clock.advance(31 * 24 * 60 * 60 * 1000);
+    const fresh = await service.start(user());
+
+    expect(await service.deleteStaleTokens()).toBe(1);
+    expect(tokens.rows).toHaveLength(1);
+    expect(await service.refresh(fresh.refreshToken)).toBeTruthy();
+  });
 });

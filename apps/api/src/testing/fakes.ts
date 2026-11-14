@@ -78,6 +78,15 @@ export class InMemoryRefreshTokens implements RefreshTokensRepository {
     }
   }
 
+  async deleteStale(before: Date): Promise<number> {
+    const keep = this.rows.filter(
+      (r) => r.expiresAt >= before && !(r.revokedAt && r.revokedAt < before),
+    );
+    const removed = this.rows.length - keep.length;
+    this.rows.splice(0, this.rows.length, ...keep);
+    return removed;
+  }
+
   active(userId: string): number {
     return this.rows.filter((r) => r.userId === userId && !r.revokedAt).length;
   }
