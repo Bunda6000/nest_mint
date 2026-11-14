@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { Clock } from './common/clock.js';
+import { RequestRateLimitGuard } from './common/request-rate-limit.guard.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { CoachModule } from './coach/coach.module.js';
@@ -47,5 +50,6 @@ import { TransactionsModule } from './transactions/transactions.module.js';
     ObligationRemovalModule,
     BudgetModule,
   ],
+  providers: [Clock, { provide: APP_GUARD, useClass: RequestRateLimitGuard }],
 })
 export class AppModule {}
