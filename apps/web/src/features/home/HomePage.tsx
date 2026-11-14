@@ -229,6 +229,9 @@ export function HomePage() {
         <Link to="/categories" className="text-emerald-700 underline">
           {t('nav.categories')}
         </Link>
+        <Link to="/forecast" className="text-emerald-700 underline">
+          Forecast
+        </Link>
         <Link to="/goals" className="text-emerald-700 underline">
           Goals
         </Link>

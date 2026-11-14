@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
+import { ForecastModule } from './forecast/forecast.module.js';
 import { GoalsModule } from './goals/goals.module.js';
 import { HealthScoreModule } from './health-score/health-score.module.js';
 import { HealthModule } from './health/health.module.js';
@@ -35,6 +36,7 @@ import { TransactionsModule } from './transactions/transactions.module.js';
     BalanceCheckInsModule,
     JobsModule,
     ExchangeRatesModule,
+    ForecastModule,
     GoalsModule,
     HealthScoreModule,
     BudgetImportModule,

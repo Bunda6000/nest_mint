@@ -10,6 +10,7 @@ import { PrismaBalanceCheckInsRepository } from './prisma-balance-check-ins.repo
 @Module({
   imports: [IncomeModule, TransactionsModule],
   controllers: [BalanceCheckInsController],
+  exports: [BALANCE_CHECK_INS_REPOSITORY],
   providers: [
     BalanceCheckInsService,
     Clock,

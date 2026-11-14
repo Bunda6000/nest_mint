@@ -10,5 +10,6 @@ import { HealthScoreService } from './health-score.service.js';
   imports: [GoalsModule, IncomeModule, TransactionsModule],
   controllers: [HealthScoreController],
   providers: [HealthScoreService, Clock],
+  exports: [HealthScoreService],
 })
 export class HealthScoreModule {}

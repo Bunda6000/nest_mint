@@ -23,9 +23,13 @@ export class HealthScoreService {
 
   /**
    * Scores the last complete months that had income. A brand-new user with no complete month yet
-   * is scored on the running month instead, so the screen is useful from day one.
+   * is scored on the running month instead, so the screen is useful from day one. `what` applies a
+   * what-if to every month looked at (NM-61), so the score can be compared before and after.
    */
-  async compute(userId: string): Promise<HealthScoreResponse> {
+  async compute(
+    userId: string,
+    what?: { incomeChange?: number; expenseChangeMkd?: number },
+  ): Promise<HealthScoreResponse> {
     const current = this.clock.now().toISOString().slice(0, 7);
     const window = monthsEndingAt(shiftMonth(current, -1), HEALTH_MONTHS);
     const [sources, expensesByMonth, { goals }] = await Promise.all([
@@ -43,7 +47,10 @@ export class HealthScoreService {
     if (used.length === 0) used = totals([current]);
 
     const result = healthScore({
-      months: used.map((t) => ({ income: t.income, expenses: t.expenses })),
+      months: used.map((t) => ({
+        income: Math.round(t.income * (1 + (what?.incomeChange ?? 0))),
+        expenses: Math.max(0, t.expenses + (what?.expenseChangeMkd ?? 0)),
+      })),
       savedMkd: goals.reduce((total, g) => total + g.savedMkd, 0),
       goalStatuses: goals.map((g) => g.status),
     });
