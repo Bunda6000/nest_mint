@@ -134,6 +134,42 @@ export interface ObligationResponse {
   installment: InstallmentDetails | null;
 }
 
+/** One bill in an obligation's history: what it cost, and whether and when it was paid. */
+export interface LedgerRow {
+  billId: string;
+  /** The billing period, "YYYY-MM". */
+  period: string;
+  dueDate: string;
+  invoiceRef: string | null;
+  /** What was paid, else the invoice amount, else the expected amount. */
+  amountMkd: number;
+  /** The day it was paid, "YYYY-MM-DD"; null while unpaid. */
+  paidOn: string | null;
+}
+
+/**
+ * Everything one obligation has billed (NM-19), by billing period. A bill counts in the year of its
+ * period, not the day it was paid. The year switcher offers `years`.
+ */
+export interface LedgerResponse {
+  obligationId: string;
+  name: string;
+  payee: string | null;
+  categoryName: string;
+  /** The year the rows are from. */
+  year: number;
+  /** Years that have bills, plus the year asked for, oldest first. */
+  years: number[];
+  /** The bills of `year`, oldest period first. */
+  rows: LedgerRow[];
+  /** All bills of `year`, paid or not. */
+  yearTotalMkd: number;
+  /** Of those, what is paid. */
+  yearPaidMkd: number;
+  /** All bills of all years. */
+  lifetimeMkd: number;
+}
+
 export interface ObligationsResponse {
   obligations: ObligationResponse[];
   /** All of the user's groups by name, including ones without lines yet. */

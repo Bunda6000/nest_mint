@@ -105,6 +105,15 @@ export class PrismaBillsRepository implements BillsRepository {
     return rows.map(toRecord);
   }
 
+  async listForObligation(userId: string, obligationId: string): Promise<BillRecord[]> {
+    const rows = await this.prisma.bill.findMany({
+      where: { userId, obligationId },
+      orderBy: { periodMonth: 'asc' },
+      select,
+    });
+    return rows.map(toRecord);
+  }
+
   async sumExpectedByGroupAndMonth(
     userId: string,
     fromMonth: string,

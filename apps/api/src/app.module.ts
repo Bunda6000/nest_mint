@@ -7,6 +7,7 @@ import { BillsModule } from './bills/bills.module.js';
 import { BudgetModule } from './budget/budget.module.js';
 import { InsightsModule } from './insights/insights.module.js';
 import { LoansModule } from './loans/loans.module.js';
+import { ObligationLedgerModule } from './obligation-ledger/obligation-ledger.module.js';
 import { ObligationRemovalModule } from './obligation-removal/obligation-removal.module.js';
 import { ObligationsModule } from './obligations/obligations.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -24,6 +25,7 @@ import { TransactionsModule } from './transactions/transactions.module.js';
     SummaryModule,
     InsightsModule,
     ObligationsModule,
+    ObligationLedgerModule,
     BillsModule,
     LoansModule,
     ObligationRemovalModule,

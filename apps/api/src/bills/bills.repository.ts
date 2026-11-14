@@ -81,6 +81,9 @@ export interface BillsRepository {
     toMonth: string,
   ): Promise<GroupMonthTotal[]>;
 
+  /** Every bill of one obligation, any month, oldest period first. */
+  listForObligation(userId: string, obligationId: string): Promise<BillRecord[]>;
+
   /** How many of the obligation's bills are paid. */
   countPaidForObligation(userId: string, obligationId: string): Promise<number>;
 

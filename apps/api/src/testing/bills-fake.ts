@@ -72,6 +72,12 @@ export class InMemoryBills implements BillsRepository {
     return this.records(userId, (r) => r.period === month);
   }
 
+  async listForObligation(userId: string, obligationId: string): Promise<BillRecord[]> {
+    return this.records(userId, (r) => r.obligationId === obligationId).sort((a, b) =>
+      a.period.localeCompare(b.period),
+    );
+  }
+
   async sumExpectedByGroupAndMonth(
     userId: string,
     fromMonth: string,

@@ -7,6 +7,7 @@ import { CategoriesPage } from './features/categories/CategoriesPage';
 import { HomePage } from './features/home/HomePage';
 import { IncomePage } from './features/income/IncomePage';
 import { BillsPage } from './features/obligations/BillsPage';
+import { LedgerPage } from './features/obligations/LedgerPage';
 import { ObligationsPage } from './features/obligations/ObligationsPage';
 import { AddExpensePage } from './features/spending/AddExpensePage';
 import { TransactionsPage } from './features/spending/TransactionsPage';
@@ -73,6 +74,14 @@ export const routes: RouteObject[] = [
     element: (
       <RequireAuth>
         <ObligationsPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/obligations/:id/history',
+    element: (
+      <RequireAuth>
+        <LedgerPage />
       </RequireAuth>
     ),
   },

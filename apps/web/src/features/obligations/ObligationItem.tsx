@@ -9,6 +9,7 @@ import type {
   ObligationResponse,
 } from '@nestmint/shared';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { formatEurCents, formatMkd, localDay } from '../../format';
 import { describeInstallmentPlan, describeInstallmentProgress } from './installmentText';
 import { LoanForm } from './LoanForm';
@@ -212,6 +213,13 @@ export function ObligationItem({
         </div>
       </div>
       <div className="mt-2 flex justify-end gap-2">
+        <Link
+          to={`/obligations/${obligation.id}/history`}
+          aria-label={`History of ${obligation.name}`}
+          className={`${small} inline-block`}
+        >
+          History
+        </Link>
         {isLoan && !paidOff && (
           <button
             type="button"
