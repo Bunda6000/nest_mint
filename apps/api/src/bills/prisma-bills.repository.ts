@@ -164,6 +164,19 @@ export class PrismaBillsRepository implements BillsRepository {
     return row ? toRecord(row) : null;
   }
 
+  async countPaidForObligation(userId: string, obligationId: string): Promise<number> {
+    return this.prisma.bill.count({
+      where: { userId, obligationId, transactionId: { not: null } },
+    });
+  }
+
+  async deleteUnpaidForObligation(userId: string, obligationId: string): Promise<number> {
+    const { count } = await this.prisma.bill.deleteMany({
+      where: { userId, obligationId, transactionId: null },
+    });
+    return count;
+  }
+
   async setUnpaidExpectedAmounts(
     userId: string,
     obligationId: string,

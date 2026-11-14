@@ -132,7 +132,7 @@ export class PrismaObligationsRepository implements ObligationsRepository {
 
   async list(userId: string): Promise<ObligationResponse[]> {
     const rows = await this.prisma.obligation.findMany({
-      where: { userId },
+      where: { userId, archivedAt: null },
       orderBy: { createdAt: 'desc' },
       select,
     });
@@ -140,7 +140,10 @@ export class PrismaObligationsRepository implements ObligationsRepository {
   }
 
   async find(userId: string, id: string): Promise<ObligationResponse | null> {
-    const row = await this.prisma.obligation.findFirst({ where: { id, userId }, select });
+    const row = await this.prisma.obligation.findFirst({
+      where: { id, userId, archivedAt: null },
+      select,
+    });
     return row ? toResponse(row) : null;
   }
 
@@ -199,5 +202,18 @@ export class PrismaObligationsRepository implements ObligationsRepository {
       },
     });
     return this.find(userId, id);
+  }
+
+  async remove(userId: string, id: string): Promise<boolean> {
+    const { count } = await this.prisma.obligation.deleteMany({ where: { id, userId } });
+    return count > 0;
+  }
+
+  async archive(userId: string, id: string): Promise<boolean> {
+    const { count } = await this.prisma.obligation.updateMany({
+      where: { id, userId, archivedAt: null },
+      data: { archivedAt: new Date() },
+    });
+    return count > 0;
   }
 }

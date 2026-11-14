@@ -13,6 +13,7 @@ import { currentLoanTerms, describeLoan, describeRateChange } from './loanText';
 import { ObligationForm } from './ObligationForm';
 import { describeObligation } from './obligationText';
 import { RateChangeForm } from './RateChangeForm';
+import { RemoveObligation } from './RemoveObligation';
 
 interface ObligationItemProps {
   obligation: ObligationResponse;
@@ -22,6 +23,8 @@ interface ObligationItemProps {
   onEdit: (values: CreateObligationData) => Promise<void>;
   onEditLoan: (values: CreateLoanData) => Promise<void>;
   onRateChange: (values: CreateRateChangeData) => Promise<void>;
+  onDelete: () => Promise<void>;
+  onArchive: () => Promise<void>;
   /** Called when this row starts or stops being edited. */
   onEditing: (editing: boolean) => void;
 }
@@ -37,9 +40,11 @@ export function ObligationItem({
   onEdit,
   onEditLoan,
   onRateChange,
+  onDelete,
+  onArchive,
   onEditing,
 }: ObligationItemProps) {
-  const [mode, setMode] = useState<'view' | 'edit' | 'rate'>('view');
+  const [mode, setMode] = useState<'view' | 'edit' | 'rate' | 'remove'>('view');
   const editing = mode === 'edit';
   const isLoan = obligation.kind === 'loan' && obligation.loan !== null;
 
@@ -47,7 +52,7 @@ export function ObligationItem({
     setMode('view');
     onEditing(false);
   };
-  const start = (next: 'edit' | 'rate') => {
+  const start = (next: 'edit' | 'rate' | 'remove') => {
     setMode(next);
     onEditing(true);
   };
@@ -155,7 +160,30 @@ export function ObligationItem({
         >
           Edit
         </button>
+        <button
+          type="button"
+          disabled={locked}
+          aria-label={`Delete ${obligation.name}`}
+          onClick={() => start('remove')}
+          className={small}
+        >
+          Delete
+        </button>
       </div>
+      {mode === 'remove' && (
+        <RemoveObligation
+          name={obligation.name}
+          onDelete={async () => {
+            await onDelete();
+            stop();
+          }}
+          onArchive={async () => {
+            await onArchive();
+            stop();
+          }}
+          onCancel={stop}
+        />
+      )}
     </li>
   );
 }

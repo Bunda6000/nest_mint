@@ -208,6 +208,9 @@ model Obligation {
   loanType          LoanType?            @map("loan_type")
   principalMkd      Int?                 @map("principal_mkd")
   annualRateBp      Int?                 @map("annual_rate_bp")
+  /// Set when a bill or loan with payments is taken out of use: it is hidden and makes no more
+  /// bills, but its paid bills stay, so history and totals do not change.
+  archivedAt        DateTime?            @map("archived_at")
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
 

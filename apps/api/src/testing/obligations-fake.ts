@@ -5,7 +5,7 @@ import type {
   ObligationsRepository,
 } from '../obligations/obligations.repository.js';
 
-type Row = ObligationResponse & { userId: string };
+type Row = ObligationResponse & { userId: string; archived: boolean };
 
 /** Keeps each user's obligations apart and lists newest entered first, like the real repository. */
 export class InMemoryObligations implements ObligationsRepository {
@@ -36,6 +36,7 @@ export class InMemoryObligations implements ObligationsRepository {
       createdMonth: this.createdMonth(),
       kind: input.loan ? 'loan' : 'bill',
       loan: input.loan ? { ...input.loan, rateChanges: [] } : null,
+      archived: false,
     };
     this.rows.push(row);
     return InMemoryObligations.response(row);
@@ -43,13 +44,13 @@ export class InMemoryObligations implements ObligationsRepository {
 
   async list(userId: string): Promise<ObligationResponse[]> {
     return this.rows
-      .filter((r) => r.userId === userId)
+      .filter((r) => r.userId === userId && !r.archived)
       .reverse()
       .map((r) => InMemoryObligations.response(r));
   }
 
   async find(userId: string, id: string): Promise<ObligationResponse | null> {
-    const row = this.rows.find((r) => r.id === id && r.userId === userId);
+    const row = this.rows.find((r) => r.id === id && r.userId === userId && !r.archived);
     return row ? InMemoryObligations.response(row) : null;
   }
 
@@ -89,6 +90,20 @@ export class InMemoryObligations implements ObligationsRepository {
       a.effectiveMonth.localeCompare(b.effectiveMonth),
     );
     return InMemoryObligations.response(row);
+  }
+
+  async remove(userId: string, id: string): Promise<boolean> {
+    const index = this.rows.findIndex((r) => r.id === id && r.userId === userId);
+    if (index < 0) return false;
+    this.rows.splice(index, 1);
+    return true;
+  }
+
+  async archive(userId: string, id: string): Promise<boolean> {
+    const row = this.rows.find((r) => r.id === id && r.userId === userId && !r.archived);
+    if (!row) return false;
+    row.archived = true;
+    return true;
   }
 
   private static response(row: Row): ObligationResponse {

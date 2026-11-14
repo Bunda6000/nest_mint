@@ -94,6 +94,16 @@ export function ObligationsPage() {
     reload();
   }
 
+  async function remove(id: string) {
+    await authedSend('DELETE', `/obligations/${id}`);
+    reload();
+  }
+
+  async function archive(id: string) {
+    await authedSend('POST', `/obligations/${id}/archive`, {});
+    reload();
+  }
+
   async function edit(id: string, values: CreateObligationData) {
     await authedSend('PATCH', `/obligations/${id}`, updateBody(values));
     reload();
@@ -191,6 +201,8 @@ export function ObligationsPage() {
                   onEdit={(values) => edit(obligation.id, values)}
                   onEditLoan={(values) => editLoan(obligation.id, values)}
                   onRateChange={(values) => changeRate(obligation.id, values)}
+                  onDelete={() => remove(obligation.id)}
+                  onArchive={() => archive(obligation.id)}
                 />
               ))}
             </ul>

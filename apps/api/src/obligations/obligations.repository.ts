@@ -52,10 +52,10 @@ export interface ObligationsRepository {
   /** The database refuses a category that belongs to another user (composite foreign key). */
   create(userId: string, input: NewObligation): Promise<ObligationResponse>;
 
-  /** All of the user's obligations, newest entered first; the service puts them in display order. */
+  /** All of the user's obligations in use (not archived), newest entered first; the service puts them in display order. */
   list(userId: string): Promise<ObligationResponse[]>;
 
-  /** `null` when the user has no such obligation. */
+  /** `null` when the user has no such obligation, or it is archived. */
   find(userId: string, id: string): Promise<ObligationResponse | null>;
 
   /** `null` when the user has no such obligation. */
@@ -70,4 +70,13 @@ export interface ObligationsRepository {
     id: string,
     change: RateChangeResponse,
   ): Promise<ObligationResponse | null>;
+
+  /**
+   * Deletes the obligation and its rate changes. Its bills must be gone already (the database
+   * refuses otherwise). `false` when the user has no such obligation.
+   */
+  remove(userId: string, id: string): Promise<boolean>;
+
+  /** Hides the obligation and stops it making bills. `false` when there is none in use. */
+  archive(userId: string, id: string): Promise<boolean>;
 }

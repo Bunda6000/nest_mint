@@ -81,6 +81,12 @@ export interface BillsRepository {
     toMonth: string,
   ): Promise<GroupMonthTotal[]>;
 
+  /** How many of the obligation's bills are paid. */
+  countPaidForObligation(userId: string, obligationId: string): Promise<number>;
+
+  /** Deletes the obligation's UNPAID bills (all months) and returns how many. Paid bills stay. */
+  deleteUnpaidForObligation(userId: string, obligationId: string): Promise<number>;
+
   /** Every unpaid bill, soonest due first (then by name). */
   listUnpaid(userId: string): Promise<BillRecord[]>;
 

@@ -70,6 +70,7 @@ function fakeApi(initial: Obl[] = [electricity()]) {
   let failLoads = 0;
   let failPost: { status: number; error: Record<string, unknown> } | null = null;
   let holdPost: Promise<void> | null = null;
+  const paidBills: Record<string, number> = {};
 
   const reply = (status: number, body?: unknown) =>
     new Response(body === undefined ? null : JSON.stringify(body), { status });
@@ -151,6 +152,14 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       data.push(created);
       return reply(201, created);
     }
+    const archiveMatch = /^\/obligations\/([^/]+)\/archive$/.exec(path);
+    if (archiveMatch && method === 'POST') {
+      const index = data.findIndex((o) => o.id === archiveMatch[1]);
+      if (index < 0)
+        return reply(404, { error: { code: 'NOT_FOUND', message: 'Obligation not found.' } });
+      data.splice(index, 1);
+      return new Response(null, { status: 204 });
+    }
     const rateMatch = /^\/obligations\/([^/]+)\/rate-changes$/.exec(path);
     if (rateMatch && method === 'POST') {
       const row = data.find((o) => o.id === rateMatch[1]);
@@ -167,6 +176,23 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       return reply(200, row);
     }
     const match = /^\/obligations\/([^/]+)$/.exec(path);
+    if (match && method === 'DELETE') {
+      const index = data.findIndex((o) => o.id === match[1]);
+      if (index < 0)
+        return reply(404, { error: { code: 'NOT_FOUND', message: 'Obligation not found.' } });
+      const paid = paidBills[match[1]!] ?? 0;
+      if (paid > 0) {
+        return reply(409, {
+          error: {
+            code: 'CONFLICT',
+            message: 'It has recorded payments.',
+            details: { paidBills: String(paid) },
+          },
+        });
+      }
+      data.splice(index, 1);
+      return new Response(null, { status: 204 });
+    }
     if (match && method === 'PATCH') {
       const row = data.find((o) => o.id === match[1]);
       if (!row)
@@ -184,6 +210,8 @@ function fakeApi(initial: Obl[] = [electricity()]) {
     holdNextPost: (gate: Promise<void>) => (holdPost = gate),
     failNextPost: (status: number, error: Record<string, unknown>) =>
       (failPost = { status, error }),
+    setPaidBills: (id: string, count: number) => (paidBills[id] = count),
+    removals: () => calls.filter((c) => c.method === 'DELETE' || c.path.endsWith('/archive')),
     paths: () =>
       calls.filter((c) => c.path !== '/auth/refresh').map((c) => `${c.method} ${c.path}`),
     posts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations'),
@@ -803,5 +831,70 @@ describe('ObligationsPage: changing a loan', () => {
     expect(body).not.toHaveProperty('expectedAmountMkd');
     expect(body).not.toHaveProperty('annualRateBp');
     expect(body).not.toHaveProperty('monthlyPaymentMkd');
+  });
+});
+
+describe('ObligationsPage: removing', () => {
+  const water = (): Obl => ({
+    id: 'w1',
+    name: 'Water',
+    payee: 'Vodovod',
+    categoryId: WATER_ID,
+    categoryName: 'Water',
+    expectedAmountMkd: 1_200,
+    dueDay: 10,
+    recurrence: 'monthly',
+    everyNMonths: null,
+    months: null,
+    startMonth: '2026-01',
+    endMonth: null,
+  });
+
+  it('asks first, then deletes one without payments and drops it from the list', async () => {
+    const api = fakeApi([water()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Delete Water' }));
+    expect(api.removals()).toHaveLength(0);
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete Water' }),
+    );
+    await waitFor(() => expect(api.removals()).toHaveLength(1));
+    expect(api.removals()[0]).toMatchObject({ method: 'DELETE', path: '/obligations/w1' });
+    await waitFor(() => expect(screen.queryByText('Water')).toBeNull());
+  });
+
+  it('says how many payments it has and archives instead', async () => {
+    const api = fakeApi([water()]);
+    api.setPaidBills('w1', 3);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Delete Water' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete Water' }),
+    );
+    expect(await screen.findByText(/has 3 recorded payments/)).toBeTruthy();
+    expect(screen.getByText('Water')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Archive Water' }));
+    await waitFor(() =>
+      expect(api.removals().map((c) => `${c.method} ${c.path}`)).toEqual([
+        'DELETE /obligations/w1',
+        'POST /obligations/w1/archive',
+      ]),
+    );
+    await waitFor(() => expect(screen.queryByText('Water')).toBeNull());
+  });
+
+  it('cancelling changes nothing', async () => {
+    const api = fakeApi([water()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Delete Water' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.removals()).toHaveLength(0);
+    expect(screen.getByText('Water')).toBeTruthy();
   });
 });
