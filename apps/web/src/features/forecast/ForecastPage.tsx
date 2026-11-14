@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { SavingsTrend } from '../charts/SavingsTrend';
 import { formatMonth } from '../spending/months';
 import { ScenarioPanel } from './ScenarioPanel';
+import { AskCoach } from './AskCoach';
 import { type IdeaPreset, SavingsIdeas } from './SavingsIdeas';
 
 const HORIZONS = [3, 6, 12, 24] as const;
@@ -114,6 +115,8 @@ export function ForecastPage() {
               month={chartMonths.at(-1)?.month ?? '2026-01'}
             />
           </div>
+
+          <AskCoach />
 
           <SavingsIdeas onTry={(value) => setPreset({ key: (preset?.key ?? 0) + 1, value })} />
 

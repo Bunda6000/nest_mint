@@ -8,5 +8,6 @@ import { InsightsService } from './insights.service.js';
   imports: [IncomeModule, TransactionsModule],
   controllers: [InsightsController],
   providers: [InsightsService],
+  exports: [InsightsService],
 })
 export class InsightsModule {}

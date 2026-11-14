@@ -152,4 +152,22 @@ describe('ForecastPage', () => {
     expect((screen.getByLabelText('By (MKD a month)') as HTMLInputElement).value).toBe('1500');
     expect(((await screen.findByLabelText('Spend less on')) as HTMLSelectElement).value).toBe('c1');
   });
+
+  it('asks the coach and shows the answer with its reason', async () => {
+    renderPage();
+    await screen.findByLabelText('Your question');
+    auth.authedSend.mockResolvedValueOnce({
+      answer: 'Start with Restaurants.',
+      why: 'Ranked by yearly saving.',
+      facts: [{ source: 'savings_ideas', text: '15% of 10,000' }],
+      provider: 'rules',
+    });
+    await userEvent.type(screen.getByLabelText('Your question'), 'Where can I save?');
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    expect(await screen.findByText('Start with Restaurants.')).toBeTruthy();
+    expect(auth.authedSend).toHaveBeenCalledWith('POST', '/coach/ask', {
+      question: 'Where can I save?',
+    });
+    expect(screen.getByText(/Ranked by yearly saving/)).toBeTruthy();
+  });
 });
