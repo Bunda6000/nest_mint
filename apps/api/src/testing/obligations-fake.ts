@@ -34,6 +34,8 @@ export class InMemoryObligations implements ObligationsRepository {
       startMonth: input.startMonth,
       endMonth: input.endMonth,
       createdMonth: this.createdMonth(),
+      kind: input.loan ? 'loan' : 'bill',
+      loan: input.loan ? { ...input.loan } : null,
     };
     this.rows.push(row);
     return InMemoryObligations.response(row);
@@ -88,6 +90,8 @@ export class InMemoryObligations implements ObligationsRepository {
       startMonth: row.startMonth,
       endMonth: row.endMonth,
       createdMonth: row.createdMonth,
+      kind: row.kind,
+      loan: row.loan ? { ...row.loan } : null,
     };
   }
 }

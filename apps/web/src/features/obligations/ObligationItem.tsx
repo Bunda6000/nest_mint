@@ -6,6 +6,7 @@ import type {
 } from '@nestmint/shared';
 import { useState } from 'react';
 import { formatEurCents, formatMkd, localDay } from '../../format';
+import { describeLoan } from './loanText';
 import { ObligationForm } from './ObligationForm';
 import { describeObligation } from './obligationText';
 
@@ -65,6 +66,9 @@ export function ObligationItem({
           <p className="text-xs text-gray-500">
             {[obligation.payee, obligation.categoryName].filter(Boolean).join(' · ')}
           </p>
+          {obligation.kind === 'loan' && obligation.loan && (
+            <p className="text-xs text-gray-500">{describeLoan(obligation.loan)}</p>
+          )}
           <p className="text-xs text-gray-500">{describeObligation(obligation)}</p>
         </div>
         <div className="shrink-0 text-right">
@@ -72,20 +76,23 @@ export function ObligationItem({
           <p className="text-xs text-gray-500">{formatEurCents(euro)}</p>
         </div>
       </div>
-      <div className="mt-2 flex justify-end">
-        <button
-          type="button"
-          disabled={locked}
-          aria-label={`Edit ${label}`}
-          onClick={() => {
-            setEditing(true);
-            onEditing(true);
-          }}
-          className={small}
-        >
-          Edit
-        </button>
-      </div>
+      {/* A loan keeps its own fields (rate, principal); editing them comes with NM-15. */}
+      {obligation.kind !== 'loan' && (
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            disabled={locked}
+            aria-label={`Edit ${label}`}
+            onClick={() => {
+              setEditing(true);
+              onEditing(true);
+            }}
+            className={small}
+          >
+            Edit
+          </button>
+        </div>
+      )}
     </li>
   );
 }

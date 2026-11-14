@@ -16,6 +16,8 @@ const base: ObligationResponse = {
   startMonth: '2026-01',
   endMonth: null,
   createdMonth: '2026-11',
+  kind: 'bill',
+  loan: null,
 };
 
 describe('describeWhen', () => {

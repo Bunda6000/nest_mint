@@ -223,4 +223,156 @@ describe.skipIf(!process.env.DATABASE_URL)('obligations', () => {
       }),
     ).rejects.toThrow();
   });
+
+  describe('loans', () => {
+    const loan = async (user: E2eUser, over: Record<string, unknown> = {}) => ({
+      name: 'Mortgage',
+      lender: 'Komercijalna Banka',
+      loanType: 'housing',
+      principalMkd: 1_000_000,
+      annualRateBp: 600,
+      categoryId: await category(user, 'Electricity'),
+      dueDay: 5,
+      startMonth: '2026-01',
+      endMonth: '2035-12',
+      ...over,
+    });
+
+    it('refuses the endpoint without a login', async () => {
+      await e2e.http().post('/api/v1/obligations/loans').send({}).expect(401);
+    });
+
+    it('creates a loan with a calculated payment and lists it', async () => {
+      const user = await e2e.newUser();
+      const saved = (await e2e.post('/obligations/loans', user, await loan(user)).expect(201))
+        .body as ObligationResponse;
+      expect(saved).toMatchObject({
+        name: 'Mortgage',
+        payee: 'Komercijalna Banka',
+        recurrence: 'monthly',
+        expectedAmountMkd: 11_102,
+        dueDay: 5,
+        startMonth: '2026-01',
+        endMonth: '2035-12',
+        kind: 'loan',
+        loan: { loanType: 'housing', principalMkd: 1_000_000, annualRateBp: 600 },
+      });
+
+      const list = (await e2e.get('/obligations', user).expect(200)).body as ObligationsResponse;
+      expect(list.obligations).toHaveLength(1);
+      expect(list.obligations[0]).toMatchObject({ kind: 'loan', expectedAmountMkd: 11_102 });
+    });
+
+    it("keeps the bank's payment when one is given", async () => {
+      const user = await e2e.newUser();
+      const saved = (
+        await e2e
+          .post('/obligations/loans', user, await loan(user, { monthlyPaymentMkd: 15_500 }))
+          .expect(201)
+      ).body as ObligationResponse;
+      expect(saved.expectedAmountMkd).toBe(15_500);
+    });
+
+    it("makes the loan's payments appear as bills, one per month, until the last month", async () => {
+      const user = await e2e.newUser();
+      const saved = (
+        await e2e
+          .post(
+            '/obligations/loans',
+            user,
+            await loan(user, {
+              startMonth: '2026-01',
+              endMonth: '2026-03',
+              monthlyPaymentMkd: 9_000,
+            }),
+          )
+          .expect(201)
+      ).body as ObligationResponse;
+      for (const month of ['2026-01', '2026-02', '2026-03', '2026-04']) {
+        await e2e.post(`/bills/generate?month=${month}`, user, {}).expect(200);
+      }
+      const months: string[] = [];
+      for (const month of ['2026-01', '2026-02', '2026-03', '2026-04']) {
+        const { bills } = (await e2e.get(`/bills?month=${month}`, user).expect(200)).body as {
+          bills: { obligationId: string; period: string; expectedAmountMkd: number }[];
+        };
+        for (const bill of bills.filter((b) => b.obligationId === saved.id)) {
+          expect(bill.expectedAmountMkd).toBe(9_000);
+          months.push(bill.period);
+        }
+      }
+      expect(months).toEqual(['2026-01', '2026-02', '2026-03']);
+    });
+
+    it('answers 400 with the field names for invalid input', async () => {
+      const user = await e2e.newUser();
+      const cases: Array<[Record<string, unknown>, string]> = [
+        [{ lender: ' ' }, 'lender'],
+        [{ loanType: 'car' }, 'loanType'],
+        [{ principalMkd: 0 }, 'principalMkd'],
+        [{ annualRateBp: 10_001 }, 'annualRateBp'],
+        [{ endMonth: '2025-12' }, 'endMonth'],
+        [{ monthlyPaymentMkd: 0 }, 'monthlyPaymentMkd'],
+      ];
+      for (const [over, field] of cases) {
+        const response = await e2e
+          .post('/obligations/loans', user, await loan(user, over))
+          .expect(400);
+        expect(Object.keys(errorOf(response.body).details ?? {})).toContain(field);
+      }
+      expect(
+        ((await e2e.get('/obligations', user)).body as ObligationsResponse).obligations,
+      ).toEqual([]);
+    });
+
+    it("refuses another user's category (404) and an archived one (409)", async () => {
+      const user = await e2e.newUser();
+      const other = await e2e.newUser();
+      await e2e
+        .post(
+          '/obligations/loans',
+          user,
+          await loan(user, { categoryId: await category(other, 'Electricity') }),
+        )
+        .expect(404);
+      const water = await category(user, 'Water');
+      await e2e.patch(`/categories/${water}`, user, { archived: true }).expect(200);
+      await e2e
+        .post('/obligations/loans', user, await loan(user, { categoryId: water }))
+        .expect(409);
+    });
+
+    it('lets the database refuse a loan missing its fields, and a bill carrying loan fields', async () => {
+      const user = await e2e.newUser();
+      const base = {
+        userId: user.id,
+        categoryId: await category(user, 'Electricity'),
+        name: 'Bad',
+        expectedAmountMkd: 100,
+        dueDay: 1,
+        recurrence: 'monthly' as const,
+        months: [],
+        startMonth: new Date('2026-01-01T00:00:00Z'),
+      };
+      await expect(
+        e2e.prisma.obligation.create({ data: { ...base, kind: 'loan' } }),
+      ).rejects.toThrow();
+      await expect(
+        e2e.prisma.obligation.create({ data: { ...base, principalMkd: 1_000 } }),
+      ).rejects.toThrow();
+      await expect(
+        e2e.prisma.obligation.create({
+          data: {
+            ...base,
+            kind: 'loan',
+            payee: 'Bank',
+            loanType: 'consumer',
+            principalMkd: 1_000,
+            annualRateBp: 10_001,
+            endMonth: new Date('2027-01-01T00:00:00Z'),
+          },
+        }),
+      ).rejects.toThrow();
+    });
+  });
 });

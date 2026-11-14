@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { ObligationRecurrence, ObligationResponse } from '@nestmint/shared';
+import type {
+  LoanType,
+  ObligationKind,
+  ObligationRecurrence,
+  ObligationResponse,
+} from '@nestmint/shared';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
@@ -20,6 +25,10 @@ const select = {
   months: true,
   startMonth: true,
   endMonth: true,
+  kind: true,
+  loanType: true,
+  principalMkd: true,
+  annualRateBp: true,
   createdAt: true,
   category: { select: { name: true } },
 } as const;
@@ -36,6 +45,10 @@ interface Row {
   months: number[];
   startMonth: Date;
   endMonth: Date | null;
+  kind: ObligationKind;
+  loanType: LoanType | null;
+  principalMkd: number | null;
+  annualRateBp: number | null;
   createdAt: Date;
   category: { name: string };
 }
@@ -59,6 +72,18 @@ const toResponse = (row: Row): ObligationResponse => ({
   startMonth: month(row.startMonth)!,
   endMonth: month(row.endMonth),
   createdMonth: month(row.createdAt)!,
+  kind: row.kind,
+  loan:
+    row.kind === 'loan' &&
+    row.loanType !== null &&
+    row.principalMkd !== null &&
+    row.annualRateBp !== null
+      ? {
+          loanType: row.loanType,
+          principalMkd: row.principalMkd,
+          annualRateBp: row.annualRateBp,
+        }
+      : null,
 });
 
 @Injectable()
@@ -80,6 +105,14 @@ export class PrismaObligationsRepository implements ObligationsRepository {
         months: input.months,
         startMonth: toMonthStart(input.startMonth),
         endMonth: input.endMonth ? toMonthStart(input.endMonth) : null,
+        ...(input.loan
+          ? {
+              kind: 'loan' as const,
+              loanType: input.loan.loanType,
+              principalMkd: input.loan.principalMkd,
+              annualRateBp: input.loan.annualRateBp,
+            }
+          : {}),
       },
       select,
     });

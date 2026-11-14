@@ -1,5 +1,6 @@
 import { HttpException } from '@nestjs/common';
-import { END_BEFORE_START, ErrorCode } from '@nestmint/shared';
+import { MAX_LOAN_RATE_BP as ENGINE_MAX_LOAN_RATE_BP } from '@nestmint/finance-engine';
+import { END_BEFORE_START, ErrorCode, MAX_LOAN_RATE_BP } from '@nestmint/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CATEGORY_GROUPS } from '../categories/categories.seed.js';
 import { InMemoryCategories } from '../testing/fakes.js';
@@ -238,5 +239,84 @@ describe('update', () => {
   it('answers "not found" for an unknown id', async () => {
     const error = await failure(service.update(A, 'nope', { name: 'X' }));
     expect(error.getStatus()).toBe(404);
+  });
+});
+
+describe('createLoan', () => {
+  const loan = (over: Record<string, unknown> = {}) =>
+    ({
+      name: 'Mortgage',
+      lender: 'Komercijalna Banka',
+      loanType: 'housing',
+      principalMkd: 1_000_000,
+      annualRateBp: 600,
+      categoryId: categoryId('Electricity'),
+      dueDay: 5,
+      startMonth: '2026-01',
+      endMonth: '2035-12',
+      ...over,
+    }) as never;
+
+  it('works out the monthly payment as an annuity when none is given', async () => {
+    const saved = await service.createLoan(A, loan());
+    expect(saved).toMatchObject({
+      name: 'Mortgage',
+      payee: 'Komercijalna Banka',
+      recurrence: 'monthly',
+      expectedAmountMkd: 11_102,
+      dueDay: 5,
+      startMonth: '2026-01',
+      endMonth: '2035-12',
+      kind: 'loan',
+      loan: { loanType: 'housing', principalMkd: 1_000_000, annualRateBp: 600 },
+    });
+  });
+
+  it("keeps the bank's payment when one is given", async () => {
+    const saved = await service.createLoan(A, loan({ monthlyPaymentMkd: 19_500 }));
+    expect(saved.expectedAmountMkd).toBe(19_500);
+  });
+
+  it('splits the principal evenly at 0 %', async () => {
+    const saved = await service.createLoan(
+      A,
+      loan({ principalMkd: 120_000, annualRateBp: 0, endMonth: '2026-12' }),
+    );
+    expect(saved.expectedAmountMkd).toBe(10_000);
+  });
+
+  it('asks for the payment when the calculation comes out below one denar', async () => {
+    const error = await failure(
+      service.createLoan(A, loan({ principalMkd: 1, annualRateBp: 0, endMonth: '2030-12' })),
+    );
+    expect(error.getStatus()).toBe(400);
+    expect(detailsOf(error)).toHaveProperty('monthlyPaymentMkd');
+  });
+
+  it('lists a loan next to the bills and a plain bill has no loan details', async () => {
+    await service.create(A, monthly());
+    await service.createLoan(A, loan());
+    const { obligations } = await service.list(A);
+    expect(obligations.map((o) => [o.name, o.kind, o.loan !== null])).toEqual([
+      ['Electricity', 'bill', false],
+      ['Mortgage', 'loan', true],
+    ]);
+  });
+
+  it("refuses an archived category (409) and another user's category (404)", async () => {
+    const other = await failure(
+      service.createLoan(A, loan({ categoryId: categoryId('Electricity', B) })),
+    );
+    expect(other.getStatus()).toBe(404);
+
+    const id = categoryId('Water');
+    await categories.updateCategory(A, id, { archived: true });
+    const archived = await failure(service.createLoan(A, loan({ categoryId: id })));
+    expect(archived.getStatus()).toBe(409);
+    expect(codeOf(archived)).toBe(ErrorCode.Conflict);
+  });
+
+  it('uses the same highest rate in the engine and in the API schema', () => {
+    expect(ENGINE_MAX_LOAN_RATE_BP).toBe(MAX_LOAN_RATE_BP);
   });
 });

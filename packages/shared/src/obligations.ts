@@ -13,6 +13,28 @@ export type ObligationRecurrence = (typeof OBLIGATION_RECURRENCES)[number];
 export const MAX_OBLIGATION_NAME_LENGTH = 60;
 export const MAX_PAYEE_LENGTH = 60;
 
+/** A plain recurring bill, or a loan paid back in monthly instalments (see `createLoanSchema`). */
+export const OBLIGATION_KINDS = ['bill', 'loan'] as const;
+export type ObligationKind = (typeof OBLIGATION_KINDS)[number];
+
+/** What a loan was taken for: a home loan (Станбен), a consumer loan (Потрошувачки) or something else. */
+export const LOAN_TYPES = ['housing', 'consumer', 'other'] as const;
+export type LoanType = (typeof LOAN_TYPES)[number];
+
+/** The highest principal of a loan, in whole denars. */
+export const MAX_LOAN_PRINCIPAL_MKD = 1_000_000_000;
+/** The highest yearly rate of a loan: 100.00 %, in basis points (1 bp = 0.01 %). */
+export const MAX_LOAN_RATE_BP = 10_000;
+
+/** What makes a loan different from a bill. The lender is the obligation's `payee`. */
+export interface LoanDetails {
+  loanType: LoanType;
+  /** The amount borrowed, in whole denars. */
+  principalMkd: number;
+  /** The yearly interest rate in basis points: 450 means 4.50 %. */
+  annualRateBp: number;
+}
+
 /** An obligation as shown in lists. Amounts are whole denars. Fields of the other recurrences are null. */
 export interface ObligationResponse {
   id: string;
@@ -36,6 +58,9 @@ export interface ObligationResponse {
   endMonth: string | null;
   /** The month it was entered, "YYYY-MM". Bills missed since then are created when catching up. */
   createdMonth: string;
+  kind: ObligationKind;
+  /** Only for loans (`kind` is "loan"); `expectedAmountMkd` is then the monthly payment. */
+  loan: LoanDetails | null;
 }
 
 export interface ObligationsResponse {
@@ -124,6 +149,51 @@ export const createObligationSchema = z.discriminatedUnion(
 
 export type CreateObligationInput = z.input<typeof createObligationSchema>;
 export type CreateObligationData = z.output<typeof createObligationSchema>;
+
+const lenderSchema = z
+  .string({ error: 'Enter the lender' })
+  .trim()
+  .min(1, 'Enter the lender')
+  .max(MAX_PAYEE_LENGTH, `Lender must be at most ${MAX_PAYEE_LENGTH} characters`);
+
+/**
+ * A loan: paid every month from the first to the last month. Leave `monthlyPaymentMkd` out and the
+ * API works it out as an annuity (a fixed payment) from the principal, rate and term; give it when
+ * the bank's figure is known, since that is what really gets paid. The rate is in basis points
+ * (450 = 4.50 %). Each month's payment becomes a bill like any other recurring bill.
+ */
+export const createLoanSchema = z
+  .object({
+    name: nameSchema,
+    lender: lenderSchema,
+    loanType: z.enum(LOAN_TYPES, { error: 'Choose the type of loan' }),
+    principalMkd: z
+      .number({ error: 'Enter the amount borrowed' })
+      .int('Enter whole denars, for example 1250000')
+      .min(1, 'Enter an amount above 0')
+      .max(
+        MAX_LOAN_PRINCIPAL_MKD,
+        `Amount must be at most ${MAX_LOAN_PRINCIPAL_MKD.toLocaleString('en-US')}`,
+      ),
+    annualRateBp: z
+      .number({ error: 'Enter the yearly interest rate' })
+      .int('Use at most two decimals, for example 4.5')
+      .min(0, 'Rate cannot be below 0')
+      .max(MAX_LOAN_RATE_BP, 'Rate must be at most 100'),
+    categoryId: categoryIdSchema,
+    dueDay: dueDaySchema,
+    startMonth: monthSchema,
+    endMonth: monthSchema,
+    monthlyPaymentMkd: amountMkdSchema.optional(),
+  })
+  .strict()
+  .refine((value) => value.endMonth >= value.startMonth, {
+    message: END_BEFORE_START,
+    path: ['endMonth'],
+  });
+
+export type CreateLoanInput = z.input<typeof createLoanSchema>;
+export type CreateLoanData = z.output<typeof createLoanSchema>;
 
 /**
  * Change any of the fields. The recurrence cannot be changed (add a new obligation), and which

@@ -168,9 +168,28 @@ enum ObligationRecurrence {
   @@map("obligation_recurrence")
 }
 
+/// What an obligation is: a plain recurring bill, or a loan paid back in monthly instalments.
+enum ObligationKind {
+  bill
+  loan
+
+  @@map("obligation_kind")
+}
+
+/// What a loan was taken for. Only set on loans.
+enum LoanType {
+  housing
+  consumer
+  other
+
+  @@map("loan_type")
+}
+
 /// A recurring bill, stored once with its schedule. Amounts are whole denars. Months are the first
 /// day of their month. `everyNMonths` applies to every_n_months and `months` (1 = January) to
-/// custom_months; the database checks that the right ones are set.
+/// custom_months; the database checks that the right ones are set. A loan is an obligation of kind
+/// `loan`: it is paid monthly (expectedAmountMkd is the monthly payment), the lender is the payee,
+/// and it has a principal, a yearly rate in basis points (450 = 4.50 %) and a last month.
 model Obligation {
   id                String               @id @default(uuid()) @db.Uuid
   userId            String               @map("user_id") @db.Uuid
@@ -184,6 +203,10 @@ model Obligation {
   months            Int[]                @default([]) @db.SmallInt
   startMonth        DateTime             @map("start_month") @db.Date
   endMonth          DateTime?            @map("end_month") @db.Date
+  kind              ObligationKind       @default(bill)
+  loanType          LoanType?            @map("loan_type")
+  principalMkd      Int?                 @map("principal_mkd")
+  annualRateBp      Int?                 @map("annual_rate_bp")
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
 

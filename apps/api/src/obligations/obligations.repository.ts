@@ -1,4 +1,4 @@
-import type { ObligationRecurrence, ObligationResponse } from '@nestmint/shared';
+import type { LoanDetails, ObligationRecurrence, ObligationResponse } from '@nestmint/shared';
 
 export const OBLIGATIONS_REPOSITORY = Symbol('OBLIGATIONS_REPOSITORY');
 
@@ -17,6 +17,8 @@ export interface NewObligation {
   /** "YYYY-MM". */
   startMonth: string;
   endMonth: string | null;
+  /** Set for a loan (the payee is then the lender); null for a plain bill. */
+  loan?: LoanDetails | null;
 }
 
 /** Only the fields that are present change. A `null` endMonth takes the end away, a `null` payee clears it. */

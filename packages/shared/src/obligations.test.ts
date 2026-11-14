@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fieldErrors } from './auth/register.js';
 import { END_BEFORE_START } from './income.js';
 import {
+  createLoanSchema,
   createObligationSchema,
   MAX_OBLIGATION_NAME_LENGTH,
   MAX_PAYEE_LENGTH,
@@ -248,5 +249,63 @@ describe('updateObligationSchema', () => {
     expect(errorsOf(updateObligationSchema, { everyNMonths: 1 })).toHaveProperty('everyNMonths');
     expect(errorsOf(updateObligationSchema, { name: ' ' })).toHaveProperty('name');
     expect(errorsOf(updateObligationSchema, { categoryId: 'x' })).toHaveProperty('categoryId');
+  });
+});
+
+const mortgage = {
+  name: 'Mortgage',
+  lender: 'Komercijalna Banka',
+  loanType: 'housing',
+  principalMkd: 3_000_000,
+  annualRateBp: 350,
+  categoryId,
+  dueDay: 5,
+  startMonth: '2026-01',
+  endMonth: '2045-12',
+};
+
+describe('createLoanSchema', () => {
+  it('accepts a loan and keeps the payment optional', () => {
+    const result = createLoanSchema.safeParse(mortgage);
+    expect(result.success).toBe(true);
+    expect(createLoanSchema.safeParse({ ...mortgage, monthlyPaymentMkd: 17_400 }).success).toBe(
+      true,
+    );
+  });
+
+  it('accepts a 0 % loan and a loan that lasts one month', () => {
+    expect(createLoanSchema.safeParse({ ...mortgage, annualRateBp: 0 }).success).toBe(true);
+    expect(createLoanSchema.safeParse({ ...mortgage, endMonth: '2026-01' }).success).toBe(true);
+  });
+
+  it.each([
+    ['name', { name: ' ' }],
+    ['lender', { lender: '' }],
+    ['loanType', { loanType: 'car' }],
+    ['principalMkd', { principalMkd: 0 }],
+    ['principalMkd', { principalMkd: 1_000_000_001 }],
+    ['principalMkd', { principalMkd: 1000.5 }],
+    ['annualRateBp', { annualRateBp: -1 }],
+    ['annualRateBp', { annualRateBp: 10_001 }],
+    ['annualRateBp', { annualRateBp: 4.5 }],
+    ['dueDay', { dueDay: 0 }],
+    ['startMonth', { startMonth: '2026-13' }],
+    ['categoryId', { categoryId: 'food' }],
+    ['monthlyPaymentMkd', { monthlyPaymentMkd: 0 }],
+  ])('refuses a bad %s', (field, over) => {
+    const result = createLoanSchema.safeParse({ ...mortgage, ...over });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(Object.keys(fieldErrors(result.error))).toContain(field);
+  });
+
+  it('needs a last month, and it must not come before the first', () => {
+    expect(createLoanSchema.safeParse(without(mortgage, 'endMonth')).success).toBe(false);
+    const result = createLoanSchema.safeParse({ ...mortgage, endMonth: '2025-12' });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(fieldErrors(result.error).endMonth).toBe(END_BEFORE_START);
+  });
+
+  it('refuses fields it does not know', () => {
+    expect(createLoanSchema.safeParse({ ...mortgage, recurrence: 'monthly' }).success).toBe(false);
   });
 });

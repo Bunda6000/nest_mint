@@ -23,6 +23,8 @@ interface Obl {
   months: number[] | null;
   startMonth: string;
   endMonth: string | null;
+  kind?: 'bill' | 'loan';
+  loan?: { loanType: string; principalMkd: number; annualRateBp: number } | null;
 }
 
 const groups = [
@@ -114,6 +116,35 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       data.push(created);
       return reply(201, created);
     }
+    if (method === 'POST' && path === '/obligations/loans') {
+      if (failPost) {
+        const { status, error } = failPost;
+        failPost = null;
+        return reply(status, { error });
+      }
+      const created: Obl = {
+        id: `o${data.length + 10}`,
+        name: String(body?.name),
+        payee: String(body?.lender),
+        categoryId: String(body?.categoryId),
+        categoryName: body?.categoryId === WATER_ID ? 'Water' : 'Electricity',
+        expectedAmountMkd: Number(body?.monthlyPaymentMkd ?? 11_102),
+        dueDay: Number(body?.dueDay),
+        recurrence: 'monthly',
+        everyNMonths: null,
+        months: null,
+        startMonth: String(body?.startMonth),
+        endMonth: String(body?.endMonth),
+        kind: 'loan',
+        loan: {
+          loanType: String(body?.loanType),
+          principalMkd: Number(body?.principalMkd),
+          annualRateBp: Number(body?.annualRateBp),
+        },
+      };
+      data.push(created);
+      return reply(201, created);
+    }
     const match = /^\/obligations\/([^/]+)$/.exec(path);
     if (match && method === 'PATCH') {
       const row = data.find((o) => o.id === match[1]);
@@ -136,6 +167,7 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       calls.filter((c) => c.path !== '/auth/refresh').map((c) => `${c.method} ${c.path}`),
     posts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations'),
     patches: () => calls.filter((c) => c.method === 'PATCH'),
+    loanPosts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations/loans'),
   };
 }
 
@@ -501,5 +533,142 @@ describe('ObligationsPage: form details', () => {
     release();
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Saving…' })).toBeNull());
     expect(api.posts()).toHaveLength(1);
+  });
+});
+
+describe('ObligationsPage: loans', () => {
+  async function openLoanForm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Add a loan' }));
+  }
+
+  async function fillLoan(
+    user: ReturnType<typeof userEvent.setup>,
+    { principal = '1000000', rate = '6', end = '2035-12', payment = '' } = {},
+  ) {
+    await user.type(screen.getByLabelText('Name'), 'Mortgage');
+    await user.type(screen.getByLabelText('Lender'), 'Komercijalna Banka');
+    await user.click(screen.getByLabelText('Water'));
+    await user.type(screen.getByLabelText(/Amount borrowed/), principal);
+    await user.type(screen.getByLabelText(/Yearly interest/), rate);
+    fireEvent.change(screen.getByLabelText(/First payment month/), {
+      target: { value: '2026-01' },
+    });
+    fireEvent.change(screen.getByLabelText(/Last payment month/), { target: { value: end } });
+    await user.type(screen.getByLabelText(/Due day/), '5');
+    if (payment) await user.type(screen.getByLabelText(/Monthly payment/), payment);
+  }
+
+  it('saves a loan without a payment, shows the worked-out payment first, and lists it', async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openLoanForm(user);
+    await fillLoan(user);
+    expect(screen.getByText(/Worked out: 11,102 MKD a month/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Save loan' }));
+
+    await waitFor(() => expect(api.loanPosts()).toHaveLength(1));
+    const body = api.loanPosts()[0]!.body!;
+    expect(body).toMatchObject({
+      name: 'Mortgage',
+      lender: 'Komercijalna Banka',
+      loanType: 'housing',
+      principalMkd: 1_000_000,
+      annualRateBp: 600,
+      categoryId: WATER_ID,
+      dueDay: 5,
+      startMonth: '2026-01',
+      endMonth: '2035-12',
+    });
+    expect(body).not.toHaveProperty('monthlyPaymentMkd');
+
+    expect(await screen.findByText(/Home loan · 1,000,000 MKD borrowed · 6 % a year/)).toBeTruthy();
+    expect(screen.getAllByText('11,102 MKD').length).toBeGreaterThan(0);
+    // The calculated fields belong to the loan, so there is no bill editor on it.
+    expect(screen.queryByRole('button', { name: /Edit Mortgage/ })).toBeNull();
+  });
+
+  it("sends the bank's payment when it is typed in, and updates the hint", async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openLoanForm(user);
+    await fillLoan(user, { payment: '19500' });
+    expect(screen.getByText(/Payment: 19,500 MKD a month/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Save loan' }));
+    await waitFor(() => expect(api.loanPosts()).toHaveLength(1));
+    expect(api.loanPosts()[0]!.body).toMatchObject({ monthlyPaymentMkd: 19_500 });
+  });
+
+  it('reads a comma as the decimal mark in the rate', async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openLoanForm(user);
+    await fillLoan(user, { rate: '4,5' });
+    await user.click(screen.getByRole('button', { name: 'Save loan' }));
+    await waitFor(() => expect(api.loanPosts()).toHaveLength(1));
+    expect(api.loanPosts()[0]!.body).toMatchObject({ annualRateBp: 450 });
+  });
+
+  it('shows what is wrong and sends nothing when the form is incomplete or mistyped', async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openLoanForm(user);
+    await user.type(screen.getByLabelText(/Amount borrowed/), '12.5');
+    await user.type(screen.getByLabelText(/Yearly interest/), '4.567');
+    await user.click(screen.getByRole('button', { name: 'Save loan' }));
+
+    expect(await screen.findByText('Enter whole denars, for example 1250')).toBeTruthy();
+    expect(screen.getByText('Use at most two decimals, for example 4.5')).toBeTruthy();
+    expect(screen.getByText('Enter a name')).toBeTruthy();
+    expect(screen.getByText('Enter the lender')).toBeTruthy();
+    expect(screen.getByText('Choose a month')).toBeTruthy();
+    expect(api.loanPosts()).toHaveLength(0);
+  });
+
+  it('refuses a last month before the first', async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openLoanForm(user);
+    await fillLoan(user, { end: '2025-12' });
+    await user.click(screen.getByRole('button', { name: 'Save loan' }));
+    expect(await screen.findByText(/before/i)).toBeTruthy();
+    expect(api.loanPosts()).toHaveLength(0);
+  });
+
+  it("shows the server's message and keeps the form when saving fails", async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openLoanForm(user);
+    await fillLoan(user);
+    api.failNextPost(409, {
+      code: 'CONFLICT',
+      message: 'This category is archived. Pick another one.',
+    });
+    await user.click(screen.getByRole('button', { name: 'Save loan' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('This category is archived.');
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Mortgage');
+  });
+
+  it('closes the form on Cancel without saving, and offers both buttons again', async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openLoanForm(user);
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Add a loan' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add a recurring bill' })).toBeTruthy();
+    expect(api.loanPosts()).toHaveLength(0);
   });
 });

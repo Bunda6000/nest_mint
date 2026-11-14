@@ -1,5 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { annuityPaymentMkd, loanTermMonths } from '@nestmint/finance-engine';
 import {
+  type CreateLoanData,
   type CreateObligationData,
   END_BEFORE_START,
   ErrorCode,
@@ -49,6 +51,44 @@ export class ObligationsService {
       months: input.recurrence === 'custom_months' ? input.months : [],
       startMonth: input.startMonth,
       endMonth: input.endMonth ?? null,
+    });
+  }
+
+  /**
+   * A loan is a monthly obligation from the first to the last month, so its payments become bills
+   * the same way as any recurring bill. Without a payment given, the fixed monthly payment is
+   * worked out as an annuity.
+   */
+  async createLoan(userId: string, input: CreateLoanData): Promise<ObligationResponse> {
+    await this.assertCategoryUsable(userId, input.categoryId);
+    const monthlyPaymentMkd =
+      input.monthlyPaymentMkd ??
+      annuityPaymentMkd(
+        input.principalMkd,
+        input.annualRateBp,
+        loanTermMonths(input.startMonth, input.endMonth),
+      );
+    if (monthlyPaymentMkd < 1) {
+      throw invalid({
+        monthlyPaymentMkd: 'The payment comes out below 1 denar. Enter it yourself.',
+      });
+    }
+    return this.obligations.create(userId, {
+      name: input.name,
+      payee: input.lender,
+      categoryId: input.categoryId,
+      expectedAmountMkd: monthlyPaymentMkd,
+      dueDay: input.dueDay,
+      recurrence: 'monthly',
+      everyNMonths: null,
+      months: [],
+      startMonth: input.startMonth,
+      endMonth: input.endMonth,
+      loan: {
+        loanType: input.loanType,
+        principalMkd: input.principalMkd,
+        annualRateBp: input.annualRateBp,
+      },
     });
   }
 
