@@ -1,10 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import {
-  loanPayoffMonth,
-  loanSchedule,
-  loanTermsInMonth,
-  monthAfter,
-} from '@nestmint/finance-engine';
+import { loanSchedule, loanTermsInMonth, monthAfter } from '@nestmint/finance-engine';
 import {
   type CreateExtraPaymentData,
   type CreateRateChangeData,
