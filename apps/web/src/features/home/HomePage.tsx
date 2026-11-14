@@ -230,10 +230,10 @@ export function HomePage() {
           {t('nav.categories')}
         </Link>
         <Link to="/forecast" className="text-emerald-700 underline">
-          Forecast
+          {t('nav.forecast')}
         </Link>
         <Link to="/goals" className="text-emerald-700 underline">
-          Goals
+          {t('nav.goals')}
         </Link>
         <Link to="/import" className="text-emerald-700 underline">
           {t('nav.import')}

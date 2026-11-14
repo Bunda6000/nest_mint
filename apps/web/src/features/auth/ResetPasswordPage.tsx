@@ -3,9 +3,11 @@ import { type FormEvent, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { apiPost, ApiError } from '../../api/client';
 import { TextField } from '../../components/TextField';
+import { useT } from '../../i18n/translate';
 
 /** NM-40: the page the emailed link opens. All sessions end once the password is changed. */
 export function ResetPasswordPage() {
+  const { t } = useT();
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
   const [password, setPassword] = useState('');
@@ -22,19 +24,19 @@ export function ResetPasswordPage() {
       setDone(true);
     } catch (e) {
       setErrors({
-        form: e instanceof ApiError ? e.message : 'Something went wrong. Please try again.',
+        form: e instanceof ApiError ? e.message : t('auth.somethingWrong'),
       });
     }
   }
 
   return (
     <section className="mx-auto max-w-sm p-6">
-      <h1 className="text-2xl font-semibold">Choose a new password</h1>
+      <h1 className="text-2xl font-semibold">{t('auth.resetTitle')}</h1>
       {done ? (
         <p className="mt-6 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
-          Your password is changed and you are logged out everywhere.{' '}
+          {t('auth.passwordChanged')}{' '}
           <Link to="/login" className="underline">
-            Log in
+            {t('auth.logIn')}
           </Link>
         </p>
       ) : (
@@ -43,12 +45,12 @@ export function ResetPasswordPage() {
             <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
               {errors.form ?? errors.token}{' '}
               <Link to="/forgot-password" className="underline">
-                Ask for a new link
+                {t('auth.askNewLink')}
               </Link>
             </p>
           )}
           <TextField
-            label="New password"
+            label={t('auth.newPassword')}
             type="password"
             autoComplete="new-password"
             value={password}
@@ -59,7 +61,7 @@ export function ResetPasswordPage() {
             type="submit"
             className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700"
           >
-            Change password
+            {t('auth.changePassword')}
           </button>
         </form>
       )}

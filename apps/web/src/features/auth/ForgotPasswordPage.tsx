@@ -3,9 +3,11 @@ import { type FormEvent, useState } from 'react';
 import { Link } from 'react-router';
 import { apiPost, ApiError } from '../../api/client';
 import { TextField } from '../../components/TextField';
+import { useT } from '../../i18n/translate';
 
 /** NM-40: asks for a reset link. The answer is the same whether or not the email has an account. */
 export function ForgotPasswordPage() {
+  const { t } = useT();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [sent, setSent] = useState(false);
@@ -19,22 +21,21 @@ export function ForgotPasswordPage() {
       await apiPost('/auth/password-reset/request', parsed.data);
       setSent(true);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.');
+      setError(e instanceof ApiError ? e.message : t('auth.somethingWrong'));
     }
   }
 
   return (
     <section className="mx-auto max-w-sm p-6">
-      <h1 className="text-2xl font-semibold">Forgot your password?</h1>
+      <h1 className="text-2xl font-semibold">{t('auth.forgotTitle')}</h1>
       {sent ? (
         <p className="mt-6 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
-          If this email has an account, a link to choose a new password is on its way. It works for
-          one hour.
+          {t('auth.linkSent')}
         </p>
       ) : (
         <form className="mt-6 flex flex-col gap-4" onSubmit={submit} noValidate>
           <TextField
-            label="Email"
+            label={t('auth.email')}
             type="email"
             autoComplete="email"
             value={email}
@@ -45,13 +46,13 @@ export function ForgotPasswordPage() {
             type="submit"
             className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700"
           >
-            Send me a link
+            {t('auth.sendLink')}
           </button>
         </form>
       )}
       <p className="mt-6 text-sm">
         <Link to="/login" className="text-emerald-700 underline">
-          Back to log in
+          {t('auth.backToLogin')}
         </Link>
       </p>
     </section>
