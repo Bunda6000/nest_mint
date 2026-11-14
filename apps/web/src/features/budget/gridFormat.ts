@@ -1,4 +1,4 @@
-import { convertMkdToEur } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import type { BudgetCellResponse } from '@nestmint/shared';
 import { currentLocale } from '../../i18n/language';
 import { lastDayOfMonth } from '../spending/months';

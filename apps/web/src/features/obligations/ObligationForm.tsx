@@ -1,4 +1,4 @@
-import { convertMkdToEur } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import {
   type CategoryGroupResponse,
   type CreateObligationData,

@@ -32,6 +32,7 @@ model User {
   obligations    Obligation[]
   obligationGroups ObligationGroup[]
   balanceCheckIns BalanceCheckIn[]
+  exchangeRates ExchangeRate[]
   bills          Bill[]
   loanExtraPayments LoanExtraPayment[]
   loanRateChanges LoanRateChange[]
@@ -353,4 +354,20 @@ model BalanceCheckIn {
   @@unique([userId, month])
   @@index([userId])
   @@map("balance_check_ins")
+}
+
+/// A MKD-per-EUR rate that applies from a day onward. Stored in 1/10,000 so it stays an integer.
+model ExchangeRate {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  rateX10000    Int      @map("rate_x10000")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, effectiveFrom])
+  @@index([userId])
+  @@map("exchange_rates")
 }

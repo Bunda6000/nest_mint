@@ -6,6 +6,7 @@ import { BudgetGridPage } from './features/budget/BudgetGridPage';
 import { CategoriesPage } from './features/categories/CategoriesPage';
 import { HomePage } from './features/home/HomePage';
 import { ImportPage } from './features/import/ImportPage';
+import { SettingsPage } from './features/settings/SettingsPage';
 import { IncomePage } from './features/income/IncomePage';
 import { BillsPage } from './features/obligations/BillsPage';
 import { LedgerPage } from './features/obligations/LedgerPage';
@@ -35,6 +36,14 @@ export const routes: RouteObject[] = [
     element: (
       <RequireAuth>
         <ImportPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/settings',
+    element: (
+      <RequireAuth>
+        <SettingsPage />
       </RequireAuth>
     ),
   },

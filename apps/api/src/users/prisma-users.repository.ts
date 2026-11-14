@@ -18,6 +18,14 @@ export class PrismaUsersRepository implements UsersRepository {
     return this.prisma.user.findUnique({ where: { email }, select: userFields });
   }
 
+  async listIds(): Promise<string[]> {
+    const rows = await this.prisma.user.findMany({
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((r) => r.id);
+  }
+
   async create(user: NewUser): Promise<User> {
     try {
       return await this.prisma.user.create({ data: user, select: userFields });

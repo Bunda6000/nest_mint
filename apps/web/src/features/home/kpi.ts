@@ -1,4 +1,5 @@
-import { type AmountChange, convertMkdToEur } from '@nestmint/finance-engine';
+import type { AmountChange } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import { formatEurCents, formatMkd } from '../../format';
 import { currentLocale } from '../../i18n/language';
 import { lastDayOfMonth } from '../spending/months';

@@ -27,6 +27,7 @@ export const en = {
   'nav.budget': 'Budget',
   'nav.categories': 'Categories',
   'nav.import': 'Import',
+  'nav.settings': 'Settings',
   'category.allCategories': 'All categories',
   'category.archivedSuffix': '(archived)',
 } as const;
@@ -57,6 +58,7 @@ export const mk: Partial<Record<MessageKey, string>> = {
   'nav.budget': 'Буџет',
   'nav.categories': 'Категории',
   'nav.import': 'Увоз',
+  'nav.settings': 'Поставки',
   'category.allCategories': 'Сите категории',
   'category.archivedSuffix': '(архивирана)',
 };

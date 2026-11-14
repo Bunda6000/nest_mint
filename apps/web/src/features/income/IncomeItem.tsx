@@ -1,4 +1,4 @@
-import { convertMkdToEur } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import type { CreateIncomeData, IncomeResponse } from '@nestmint/shared';
 import { useState } from 'react';
 import { formatEurCents, formatMkd, localDay } from '../../format';

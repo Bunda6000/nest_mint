@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nestjs",
   "installCommand": "npx --yes pnpm@9.15.9 install --no-frozen-lockfile",
-  "buildCommand": "npx --yes pnpm@9.15.9 --filter @nestmint/shared --filter @nestmint/finance-engine build && npx --yes pnpm@9.15.9 prisma:generate && npx --yes pnpm@9.15.9 prisma:deploy"
+  "buildCommand": "npx --yes pnpm@9.15.9 --filter @nestmint/shared --filter @nestmint/finance-engine build && npx --yes pnpm@9.15.9 prisma:generate && npx --yes pnpm@9.15.9 prisma:deploy",
+  "crons": [
+    {
+      "path": "/api/v1/jobs/monthly",
+      "schedule": "15 3 * * *"
+    }
+  ]
 }

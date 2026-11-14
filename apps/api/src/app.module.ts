@@ -8,6 +8,8 @@ import { BudgetModule } from './budget/budget.module.js';
 import { InsightsModule } from './insights/insights.module.js';
 import { LoansModule } from './loans/loans.module.js';
 import { BudgetImportModule } from './budget-import/budget-import.module.js';
+import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module.js';
+import { JobsModule } from './jobs/jobs.module.js';
 import { BalanceCheckInsModule } from './balance-check-ins/balance-check-ins.module.js';
 import { ObligationLedgerModule } from './obligation-ledger/obligation-ledger.module.js';
 import { ObligationRemovalModule } from './obligation-removal/obligation-removal.module.js';
@@ -29,6 +31,8 @@ import { TransactionsModule } from './transactions/transactions.module.js';
     ObligationsModule,
     ObligationLedgerModule,
     BalanceCheckInsModule,
+    JobsModule,
+    ExchangeRatesModule,
     BudgetImportModule,
     BillsModule,
     LoansModule,

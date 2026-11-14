@@ -12,6 +12,8 @@ export class DuplicateEmailError extends Error {
 export interface UsersRepository {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
+  /** Every user's id, oldest first. Only for system jobs that act for all users, one at a time. */
+  listIds(): Promise<string[]>;
   /** @throws DuplicateEmailError */
   create(user: NewUser): Promise<User>;
 }

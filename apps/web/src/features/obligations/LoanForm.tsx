@@ -1,4 +1,5 @@
-import { annuityPaymentMkd, convertMkdToEur, loanTermMonths } from '@nestmint/finance-engine';
+import { annuityPaymentMkd, loanTermMonths } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import {
   type CategoryGroupResponse,
   type CreateLoanData,

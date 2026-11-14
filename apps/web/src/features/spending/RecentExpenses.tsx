@@ -1,4 +1,4 @@
-import { convertMkdToEur } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import type { TransactionResponse } from '@nestmint/shared';
 import { formatDay, formatEurCents, formatMkd } from '../../format';
 import { useT } from '../../i18n/translate';

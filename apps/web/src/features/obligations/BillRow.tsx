@@ -1,4 +1,4 @@
-import { convertMkdToEur } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import type { BillResponse } from '@nestmint/shared';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';

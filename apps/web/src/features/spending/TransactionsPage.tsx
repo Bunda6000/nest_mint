@@ -1,4 +1,4 @@
-import { convertMkdToEur } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import type { CategoriesResponse, MonthTransactionsResponse } from '@nestmint/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';

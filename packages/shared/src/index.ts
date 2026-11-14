@@ -7,6 +7,7 @@ export * from './categories.js';
 export * from './income.js';
 export * from './insights.js';
 export * from './balance-check-ins.js';
+export * from './exchange-rates.js';
 export * from './budget-import.js';
 export * from './obligations.js';
 export * from './summary.js';

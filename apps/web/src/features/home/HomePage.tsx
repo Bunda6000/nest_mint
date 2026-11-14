@@ -229,6 +229,9 @@ export function HomePage() {
         <Link to="/import" className="text-emerald-700 underline">
           {t('nav.import')}
         </Link>
+        <Link to="/settings" className="text-emerald-700 underline">
+          {t('nav.settings')}
+        </Link>
       </nav>
     </section>
   );

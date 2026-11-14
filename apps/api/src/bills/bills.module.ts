@@ -10,6 +10,6 @@ import { PrismaBillsRepository } from './prisma-bills.repository.js';
   imports: [ObligationsModule],
   controllers: [BillsController],
   providers: [BillsService, Clock, { provide: BILLS_REPOSITORY, useClass: PrismaBillsRepository }],
-  exports: [BILLS_REPOSITORY],
+  exports: [BILLS_REPOSITORY, BillsService],
 })
 export class BillsModule {}

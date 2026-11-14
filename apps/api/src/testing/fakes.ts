@@ -28,6 +28,10 @@ export class InMemoryUsers implements UsersRepository {
     return this.rows.find((u) => u.email === email) ?? null;
   }
 
+  async listIds(): Promise<string[]> {
+    return this.rows.map((u) => u.id);
+  }
+
   async create(user: NewUser): Promise<User> {
     if (this.raceOnCreate) throw new DuplicateEmailError();
     const row: User = { id: `id-${this.rows.length + 1}`, displayName: null, ...user };

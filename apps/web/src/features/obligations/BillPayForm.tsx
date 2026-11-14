@@ -1,4 +1,4 @@
-import { convertMkdToEur } from '@nestmint/finance-engine';
+import { convertMkdToEur } from '../../rates';
 import { amountMkdSchema, isoDateSchema } from '@nestmint/shared';
 import { type FormEvent, useId, useMemo, useState } from 'react';
 import { ApiError } from '../../api/client';
