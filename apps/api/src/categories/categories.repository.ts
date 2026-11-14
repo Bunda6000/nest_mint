@@ -1,4 +1,9 @@
-import type { CategoriesResponse, CategoryResponse, GroupResponse } from '@nestmint/shared';
+import type {
+  CategoriesResponse,
+  CategoryResponse,
+  CategoryUsageResponse,
+  GroupResponse,
+} from '@nestmint/shared';
 import type { SeedGroup } from './categories.seed.js';
 
 export const CATEGORIES_REPOSITORY = Symbol('CATEGORIES_REPOSITORY');
@@ -7,6 +12,8 @@ export const CATEGORIES_REPOSITORY = Symbol('CATEGORIES_REPOSITORY');
 export interface ItemChange {
   name?: string;
   archived?: boolean;
+  /** Categories only: move to this group (the caller has checked it is active and the name is free). */
+  groupId?: string;
 }
 
 export interface CategoryRecord extends CategoryResponse {
@@ -74,6 +81,19 @@ export interface CategoriesRepository {
     change: ItemChange,
     at: Date,
   ): Promise<CategoryResponse | null>;
+
+  /** How many transactions and obligations use the category. */
+  categoryUsage(userId: string, categoryId: string): Promise<CategoryUsageResponse>;
+  /**
+   * Moves all transactions and obligations of `sourceId` to `targetId` and archives the source, in
+   * one step. Returns what moved, or null when either category is not the user's.
+   */
+  mergeCategory(
+    userId: string,
+    sourceId: string,
+    targetId: string,
+    at: Date,
+  ): Promise<CategoryUsageResponse | null>;
 
   /** `ids` must be exactly the user's active groups. Returns false (and changes nothing) otherwise. */
   reorderGroups(userId: string, ids: readonly string[]): Promise<boolean>;

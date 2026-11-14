@@ -359,3 +359,73 @@ describe('reordering', () => {
     ).toEqual({ status: 404, code: ErrorCode.NotFound });
   });
 });
+
+describe('CategoriesService move and merge', () => {
+  it('moves a category to the end of another group and keeps its id', async () => {
+    const { service } = setup();
+    await service.list(A);
+    const id = await categoryId(service, 'Groceries');
+    const target = await groupId(service, DEFAULT_CATEGORY_GROUPS[0]!.name);
+    const moved = await service.updateCategory(A, id, { groupId: target });
+    expect(moved).toMatchObject({ id, groupId: target });
+  });
+
+  it('refuses a move into an archived group, a missing group and a taken name', async () => {
+    const { service } = setup();
+    await service.list(A);
+    const id = await categoryId(service, 'Groceries');
+    const other = await groupId(service, DEFAULT_CATEGORY_GROUPS[0]!.name);
+    await service.createCategory(A, { groupId: other, name: 'Groceries' });
+    expect(await failure(service.updateCategory(A, id, { groupId: other }))).toMatchObject({
+      status: 409,
+      code: ErrorCode.NameTaken,
+    });
+    const empty = await service.createGroup(A, { name: 'Empty' });
+    await service.updateGroup(A, empty.id, { archived: true });
+    expect(await failure(service.updateCategory(A, id, { groupId: empty.id }))).toMatchObject({
+      status: 409,
+    });
+    expect(
+      await failure(
+        service.updateCategory(A, id, { groupId: '00000000-0000-4000-8000-000000000000' }),
+      ),
+    ).toMatchObject({ status: 404 });
+    // Another user's group is not reachable either.
+    await service.list(B);
+    const foreign = await groupId(service, DEFAULT_CATEGORY_GROUPS[0]!.name, B);
+    expect(await failure(service.updateCategory(A, id, { groupId: foreign }))).toMatchObject({
+      status: 404,
+    });
+  });
+
+  it('merges: moves everything, archives the source and reports the counts', async () => {
+    const { service, repository } = setup();
+    await service.list(A);
+    const source = await categoryId(service, 'Groceries');
+    const target = await categoryId(service, 'Restaurants');
+    repository.usage.set(source, { transactions: 3, obligations: 1 });
+    expect(await service.usage(A, source)).toEqual({ transactions: 3, obligations: 1 });
+
+    const result = await service.merge(A, source, target);
+    expect(result).toMatchObject({ transactions: 3, obligations: 1, target: { id: target } });
+    expect(await service.usage(A, target)).toEqual({ transactions: 3, obligations: 1 });
+    const archived = (await service.list(A, true)).groups
+      .flatMap((g) => g.categories)
+      .find((c) => c.id === source);
+    expect(archived?.archived).toBe(true);
+  });
+
+  it('refuses merging into itself, into an archived category and across users', async () => {
+    const { service } = setup();
+    await service.list(A);
+    await service.list(B);
+    const a = await categoryId(service, 'Groceries');
+    const b = await categoryId(service, 'Restaurants');
+    expect(await failure(service.merge(A, a, a))).toMatchObject({ status: 400 });
+    await service.updateCategory(A, b, { archived: true });
+    expect(await failure(service.merge(A, a, b))).toMatchObject({ status: 409 });
+    const foreign = await categoryId(service, 'Restaurants', B);
+    expect(await failure(service.merge(A, a, foreign))).toMatchObject({ status: 404 });
+    expect(await failure(service.usage(B, a))).toMatchObject({ status: 404 });
+  });
+});

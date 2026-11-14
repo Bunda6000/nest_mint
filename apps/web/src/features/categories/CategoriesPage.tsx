@@ -1,4 +1,4 @@
-import type { CategoriesResponse } from '@nestmint/shared';
+import type { CategoriesResponse, CategoryUsageResponse } from '@nestmint/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ApiError } from '../../api/client';
@@ -73,11 +73,29 @@ export function CategoriesPage() {
 
   const actions: CategoryActions = {
     busy,
+    groups,
     addGroup: (name) => run(() => authedSend('POST', '/categories/groups', { name })),
     addCategory: (groupId, name) => run(() => authedSend('POST', '/categories', { groupId, name })),
     rename: (kind, id, name) => run(() => authedSend('PATCH', itemPath(kind, id), { name })),
     setArchived: (kind, id, archived) =>
       run(() => authedSend('PATCH', itemPath(kind, id), { archived })),
+    moveToGroup: (categoryId, groupId) =>
+      run(() => authedSend('PATCH', `/categories/${categoryId}`, { groupId })),
+    usage: async (categoryId) => {
+      setProblem(null);
+      try {
+        return await authedGet<CategoryUsageResponse>(`/categories/${categoryId}/usage`);
+      } catch (error) {
+        setProblem(
+          error instanceof ApiError ? error.message : 'Something went wrong. Please try again.',
+        );
+        return null;
+      }
+    },
+    merge: (sourceId, targetId) =>
+      run(() =>
+        authedSend('POST', `/categories/${sourceId}/merge`, { targetCategoryId: targetId }),
+      ),
     moveGroup: async (id, direction) => {
       const ids = swapped(activeGroupIds, id, direction);
       return ids ? run(() => authedSend('PUT', '/categories/groups/order', { ids })) : false;

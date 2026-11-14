@@ -2,10 +2,13 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
   type CategoriesResponse,
   type CategoryResponse,
+  type CategoryUsageResponse,
   type CreateCategoryData,
   type CreateGroupData,
   ErrorCode,
   type GroupResponse,
+  type MergeCategoryResponse,
+  type UpdateCategoryData,
   type UpdateCategoryItemData,
 } from '@nestmint/shared';
 import { ApiException } from '../common/api.exception.js';
@@ -118,7 +121,7 @@ export class CategoriesService {
   async updateCategory(
     userId: string,
     categoryId: string,
-    change: UpdateCategoryItemData,
+    change: UpdateCategoryData,
   ): Promise<CategoryResponse> {
     await this.ensureSeeded(userId);
     const current = await this.categories.findCategory(userId, categoryId);
@@ -131,8 +134,27 @@ export class CategoriesService {
         'Its group is archived. Restore the group first.',
       );
     }
-    if (change.name !== undefined) {
-      await this.assertCategoryNameFree(userId, current.groupId, change.name, categoryId);
+    // A move keeps the category's id, so its transactions and bills stay with it.
+    const moving = change.groupId !== undefined && change.groupId !== current.groupId;
+    if (moving) {
+      const target = await this.categories.findGroup(userId, change.groupId!);
+      if (!target) throw groupNotFound();
+      if (target.archived) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          ErrorCode.Conflict,
+          'That group is archived. Restore it before moving a category into it.',
+        );
+      }
+    }
+    const finalGroup = moving ? change.groupId! : current.groupId;
+    if (change.name !== undefined || moving) {
+      await this.assertCategoryNameFree(
+        userId,
+        finalGroup,
+        change.name ?? current.name,
+        categoryId,
+      );
     }
 
     try {
@@ -147,6 +169,38 @@ export class CategoriesService {
     } catch (error) {
       throw this.asNameConflict(error, 'category', change.name);
     }
+  }
+
+  /** How many items a merge would move; shown in the confirmation. */
+  async usage(userId: string, categoryId: string): Promise<CategoryUsageResponse> {
+    await this.ensureSeeded(userId);
+    if (!(await this.categories.findCategory(userId, categoryId))) throw categoryNotFound();
+    return this.categories.categoryUsage(userId, categoryId);
+  }
+
+  /** Moves everything of `sourceId` to `targetId` and archives `sourceId`. */
+  async merge(userId: string, sourceId: string, targetId: string): Promise<MergeCategoryResponse> {
+    await this.ensureSeeded(userId);
+    const source = await this.categories.findCategory(userId, sourceId);
+    const target = await this.categories.findCategory(userId, targetId);
+    if (!source || !target) throw categoryNotFound();
+    if (sourceId === targetId) {
+      throw new ApiException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.ValidationFailed,
+        'Choose a different category to merge into.',
+      );
+    }
+    if (target.archived || target.groupArchived) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        ErrorCode.Conflict,
+        'The category to merge into is archived. Restore it first.',
+      );
+    }
+    const moved = await this.categories.mergeCategory(userId, sourceId, targetId, this.clock.now());
+    if (!moved) throw categoryNotFound();
+    return { ...moved, target };
   }
 
   async reorderGroups(userId: string, ids: readonly string[]): Promise<void> {

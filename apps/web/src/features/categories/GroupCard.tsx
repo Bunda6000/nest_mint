@@ -1,6 +1,7 @@
 import type { CategoryGroupResponse } from '@nestmint/shared';
 import { useState } from 'react';
 import type { CategoryActions } from './categoryActions';
+import { CategoryRelocate } from './CategoryRelocate';
 import { ItemRow } from './ItemRow';
 import { NameForm } from './NameForm';
 
@@ -55,6 +56,9 @@ export function GroupCard({ group, position, actions }: GroupCardProps) {
                 onArchive={() => void actions.setArchived('category', category.id, true)}
                 onRestore={() => void actions.setArchived('category', category.id, false)}
               />
+              {!category.archived && !group.archived && (
+                <CategoryRelocate category={category} actions={actions} />
+              )}
             </li>
           );
         })}

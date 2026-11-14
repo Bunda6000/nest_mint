@@ -50,6 +50,35 @@ export const updateCategoryItemSchema = z
   });
 export type UpdateCategoryItemData = z.output<typeof updateCategoryItemSchema>;
 
+/** Rename, archive/restore and/or move to another group (`groupId`) – used for categories only. */
+export const updateCategorySchema = z
+  .object({
+    name: categoryNameSchema.optional(),
+    archived: z.boolean().optional(),
+    groupId: z.uuid().optional(),
+  })
+  .refine(
+    (value) =>
+      value.name !== undefined || value.archived !== undefined || value.groupId !== undefined,
+    { message: 'Nothing to change' },
+  );
+export type UpdateCategoryData = z.output<typeof updateCategorySchema>;
+
+/** Merge: everything of this category moves to `targetCategoryId`, then it is archived. */
+export const mergeCategorySchema = z.object({ targetCategoryId: z.uuid() });
+export type MergeCategoryData = z.output<typeof mergeCategorySchema>;
+
+/** What a category is used by; shown before a merge. */
+export interface CategoryUsageResponse {
+  transactions: number;
+  obligations: number;
+}
+
+/** What a merge moved. */
+export interface MergeCategoryResponse extends CategoryUsageResponse {
+  target: CategoryResponse;
+}
+
 /** The complete, new order of the active items in a list. */
 export const reorderSchema = z.object({
   ids: z

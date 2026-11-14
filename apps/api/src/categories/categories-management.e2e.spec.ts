@@ -264,4 +264,77 @@ describe.skipIf(!process.env.DATABASE_URL)('managing categories', () => {
       await e2e.post('/categories/groups', bob, { name: 'Pets' }).expect(201);
     });
   });
+
+  describe('moving and merging', () => {
+    const categoryOf = async (user: E2eUser, name: string) =>
+      (await tree(user, true)).flatMap((g) => g.categories).find((c) => c.name === name)!;
+
+    it('moves a category and keeps its expenses', async () => {
+      const user = await e2e.newUser();
+      const groceries = await categoryOf(user, 'Groceries');
+      await e2e
+        .post('/transactions', user, {
+          categoryId: groceries.id,
+          amountMkd: 500,
+          occurredOn: '2026-11-02',
+        })
+        .expect(201);
+      const pets = (await e2e.post('/categories/groups', user, { name: 'Pets' }).expect(201))
+        .body as { id: string };
+
+      const moved = await e2e
+        .patch(`/categories/${groceries.id}`, user, { groupId: pets.id })
+        .expect(200);
+      expect(moved.body).toMatchObject({ id: groceries.id, groupId: pets.id });
+      const usage = await e2e.get(`/categories/${groceries.id}/usage`, user).expect(200);
+      expect(usage.body).toEqual({ transactions: 1, obligations: 0 });
+    });
+
+    it('merges two categories: expenses and bills move, the source is archived', async () => {
+      const user = await e2e.newUser();
+      const source = await categoryOf(user, 'Groceries');
+      const target = await categoryOf(user, 'Restaurants');
+      await e2e
+        .post('/transactions', user, {
+          categoryId: source.id,
+          amountMkd: 700,
+          occurredOn: '2026-11-03',
+        })
+        .expect(201);
+      await e2e
+        .post('/obligations', user, {
+          recurrence: 'monthly',
+          name: 'Veggie box',
+          categoryId: source.id,
+          expectedAmountMkd: 1_000,
+          dueDay: 5,
+          startMonth: '2026-11',
+        })
+        .expect(201);
+
+      const result = await e2e
+        .post(`/categories/${source.id}/merge`, user, { targetCategoryId: target.id })
+        .expect(200);
+      expect(result.body).toMatchObject({ transactions: 1, obligations: 1 });
+      expect(await e2e.get(`/categories/${target.id}/usage`, user).then((r) => r.body)).toEqual({
+        transactions: 1,
+        obligations: 1,
+      });
+      expect((await categoryOf(user, 'Groceries')).archived).toBe(true);
+    });
+
+    it('does not reach other users', async () => {
+      const alice = await e2e.newUser();
+      const bob = await e2e.newUser();
+      const mine = await categoryOf(alice, 'Groceries');
+      const hers = await categoryOf(bob, 'Restaurants');
+      await e2e
+        .post(`/categories/${mine.id}/merge`, alice, { targetCategoryId: hers.id })
+        .expect(404);
+      await e2e.get(`/categories/${mine.id}/usage`, bob).expect(404);
+      await e2e
+        .patch(`/categories/${mine.id}`, alice, { groupId: (await tree(bob))[0]!.id })
+        .expect(404);
+    });
+  });
 });

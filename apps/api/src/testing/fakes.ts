@@ -1,4 +1,9 @@
-import type { CategoriesResponse, CategoryResponse, GroupResponse } from '@nestmint/shared';
+import type {
+  CategoriesResponse,
+  CategoryResponse,
+  CategoryUsageResponse,
+  GroupResponse,
+} from '@nestmint/shared';
 import {
   type CategoriesRepository,
   type CategoryRecord,
@@ -271,6 +276,16 @@ export class InMemoryCategories implements CategoriesRepository {
     const row = this.ownCategory(userId, categoryId);
     if (!row) return null;
     if (change.name !== undefined) row.name = change.name;
+    if (change.groupId !== undefined && change.groupId !== row.groupId) {
+      row.sortOrder =
+        Math.max(
+          -1,
+          ...this.categories
+            .filter((c) => c.userId === userId && c.groupId === change.groupId)
+            .map((c) => c.sortOrder),
+        ) + 1;
+      row.groupId = change.groupId;
+    }
     if (change.archived === true) row.archived = true;
     if (change.archived === false && row.archived) {
       row.archived = false;
@@ -283,6 +298,32 @@ export class InMemoryCategories implements CategoriesRepository {
         ) + 1;
     }
     return InMemoryCategories.category(row);
+  }
+
+  /** What tests say is using each category (the fake has no transactions of its own). */
+  readonly usage = new Map<string, CategoryUsageResponse>();
+
+  async categoryUsage(userId: string, categoryId: string): Promise<CategoryUsageResponse> {
+    void userId;
+    return this.usage.get(categoryId) ?? { transactions: 0, obligations: 0 };
+  }
+
+  async mergeCategory(
+    userId: string,
+    sourceId: string,
+    targetId: string,
+  ): Promise<CategoryUsageResponse | null> {
+    const source = this.ownCategory(userId, sourceId);
+    if (!source || !this.ownCategory(userId, targetId)) return null;
+    const moved = await this.categoryUsage(userId, sourceId);
+    const target = await this.categoryUsage(userId, targetId);
+    this.usage.set(targetId, {
+      transactions: target.transactions + moved.transactions,
+      obligations: target.obligations + moved.obligations,
+    });
+    this.usage.delete(sourceId);
+    source.archived = true;
+    return moved;
   }
 
   private reorder(rows: GroupRow[], ids: readonly string[]): boolean {

@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { CategoriesResponse, CategoryResponse, GroupResponse } from '@nestmint/shared';
+import type {
+  CategoriesResponse,
+  CategoryResponse,
+  CategoryUsageResponse,
+  GroupResponse,
+} from '@nestmint/shared';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -206,7 +211,6 @@ export class PrismaCategoriesRepository implements CategoriesRepository {
           select: groupSelect,
         });
         if (!current) return null;
-
         const data: { name?: string; archivedAt?: Date | null; sortOrder?: number } = {};
         if (change.name !== undefined) data.name = change.name;
 
@@ -249,8 +253,21 @@ export class PrismaCategoriesRepository implements CategoriesRepository {
         });
         if (!current) return null;
 
-        const data: { name?: string; archivedAt?: Date | null; sortOrder?: number } = {};
+        const data: {
+          name?: string;
+          archivedAt?: Date | null;
+          sortOrder?: number;
+          groupId?: string;
+        } = {};
         if (change.name !== undefined) data.name = change.name;
+        if (change.groupId !== undefined && change.groupId !== current.groupId) {
+          const last = await tx.category.aggregate({
+            where: { userId, groupId: change.groupId },
+            _max: { sortOrder: true },
+          });
+          data.groupId = change.groupId;
+          data.sortOrder = (last._max.sortOrder ?? -1) + 1;
+        }
 
         if (change.archived === true && current.archivedAt === null) {
           data.archivedAt = at;
@@ -271,6 +288,41 @@ export class PrismaCategoriesRepository implements CategoriesRepository {
         return toCategory(updated);
       }),
     );
+  }
+
+  async categoryUsage(userId: string, categoryId: string): Promise<CategoryUsageResponse> {
+    const [transactions, obligations] = await Promise.all([
+      this.prisma.transaction.count({ where: { userId, categoryId } }),
+      this.prisma.obligation.count({ where: { userId, categoryId } }),
+    ]);
+    return { transactions, obligations };
+  }
+
+  mergeCategory(
+    userId: string,
+    sourceId: string,
+    targetId: string,
+    at: Date,
+  ): Promise<CategoryUsageResponse | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const found = await tx.category.count({
+        where: { userId, id: { in: [sourceId, targetId] } },
+      });
+      if (found !== 2) return null;
+      const moved = await tx.transaction.updateMany({
+        where: { userId, categoryId: sourceId },
+        data: { categoryId: targetId },
+      });
+      const obligations = await tx.obligation.updateMany({
+        where: { userId, categoryId: sourceId },
+        data: { categoryId: targetId },
+      });
+      await tx.category.updateMany({
+        where: { userId, id: sourceId, archivedAt: null },
+        data: { archivedAt: at },
+      });
+      return { transactions: moved.count, obligations: obligations.count };
+    });
   }
 
   reorderGroups(userId: string, ids: readonly string[]): Promise<boolean> {

@@ -71,6 +71,9 @@ function fakeApi() {
       refreshes += 1;
       return reply(200, { ...session, accessToken: `token-${refreshes}` });
     }
+    if (method === 'GET' && /\/usage$/.test(path)) {
+      return reply(200, { transactions: 3, obligations: 1 });
+    }
     if (method === 'GET') {
       const all = path.includes('includeArchived=true');
       return reply(200, {
@@ -115,12 +118,25 @@ function fakeApi() {
       group.categories.sort((a, b) => ids!.indexOf(a.id) - ids!.indexOf(b.id));
       return reply(204);
     }
+    const merge = /^\/categories\/(\w+)\/merge$/.exec(path);
+    if (method === 'POST' && merge) {
+      const all = groups.flatMap((g) => g.categories);
+      all.find((c) => c.id === merge[1])!.archived = true;
+      return reply(200, {});
+    }
     const target = /^\/categories\/(groups\/)?(\w+)$/.exec(path);
     if (method === 'PATCH' && target) {
       const item: Item | undefined = target[1]
         ? groups.find((g) => g.id === target[2])
         : groups.flatMap((g) => g.categories).find((c) => c.id === target[2]);
       if (body?.name !== undefined) item!.name = String(body.name);
+      if (body?.groupId !== undefined) {
+        const moving = item as Category;
+        const from = groups.find((g) => g.id === moving.groupId)!;
+        from.categories = from.categories.filter((c) => c.id !== moving.id);
+        moving.groupId = String(body.groupId);
+        groups.find((g) => g.id === moving.groupId)!.categories.push(moving);
+      }
       if (body?.archived !== undefined) {
         item!.archived = Boolean(body.archived);
         if (target[1]) {
@@ -179,6 +195,42 @@ describe('editing categories', () => {
     expect(button('Rename Home')).toBeTruthy();
     await user.click(button('Done'));
     expect(screen.queryByRole('button', { name: 'Rename Home' })).toBeNull();
+  });
+
+  it('moves a category to another group', async () => {
+    const { user, api } = setup();
+    await startEditing(user);
+    await user.click(button('Move Water to another group'));
+    await user.selectOptions(screen.getByLabelText('Target group'), 'Food');
+    await user.click(button('Move'));
+
+    await waitFor(() =>
+      expect(api.changes()).toEqual([
+        { method: 'PATCH', path: '/categories/c1', body: { groupId: 'g2' } },
+      ]),
+    );
+    const food = (await screen.findByRole('heading', { name: 'Food' })).closest('li')!;
+    expect(within(food).getByText('Water')).toBeTruthy();
+  });
+
+  it('shows what a merge moves, and merges only after confirming', async () => {
+    const { user, api } = setup();
+    await startEditing(user);
+    await user.click(button('Merge Water into another category'));
+    await user.selectOptions(screen.getByLabelText('Category to merge into'), 'Home › Electricity');
+    await user.click(button('Continue'));
+
+    expect(
+      await screen.findByText(/3 expenses and 1 bill will move to “Home › Electricity”/),
+    ).toBeTruthy();
+    expect(api.changes()).toEqual([]);
+    await user.click(button('Confirm merge Water'));
+
+    await waitFor(() =>
+      expect(api.changes()).toEqual([
+        { method: 'POST', path: '/categories/c1/merge', body: { targetCategoryId: 'c2' } },
+      ]),
+    );
   });
 
   it('adds a group', async () => {
