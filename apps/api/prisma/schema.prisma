@@ -24,18 +24,20 @@ model User {
   /// Set once when the default categories were created; never seeded again after that.
   categoriesSeededAt DateTime? @map("categories_seeded_at")
 
-  refreshTokens  RefreshToken[]
-  categoryGroups CategoryGroup[]
-  categories     Category[]
-  transactions   Transaction[]
-  incomes        Income[]
-  obligations    Obligation[]
-  obligationGroups ObligationGroup[]
-  balanceCheckIns BalanceCheckIn[]
-  exchangeRates ExchangeRate[]
-  bills          Bill[]
+  refreshTokens     RefreshToken[]
+  categoryGroups    CategoryGroup[]
+  categories        Category[]
+  transactions      Transaction[]
+  incomes           Income[]
+  obligations       Obligation[]
+  obligationGroups  ObligationGroup[]
+  balanceCheckIns   BalanceCheckIn[]
+  savingsGoals      SavingsGoal[]
+  goalContributions GoalContribution[]
+  exchangeRates     ExchangeRate[]
+  bills             Bill[]
   loanExtraPayments LoanExtraPayment[]
-  loanRateChanges LoanRateChange[]
+  loanRateChanges   LoanRateChange[]
 
   @@map("users")
 }
@@ -197,41 +199,41 @@ enum LoanType {
 /// `loan`: it is paid monthly (expectedAmountMkd is the monthly payment), the lender is the payee,
 /// and it has a principal, a yearly rate in basis points (450 = 4.50 %) and a last month.
 model Obligation {
-  id                String               @id @default(uuid()) @db.Uuid
-  userId            String               @map("user_id") @db.Uuid
-  categoryId        String               @map("category_id") @db.Uuid
-  name              String
-  payee             String?
-  expectedAmountMkd Int                  @map("expected_amount_mkd")
-  dueDay            Int                  @map("due_day") @db.SmallInt
-  recurrence        ObligationRecurrence
-  everyNMonths      Int?                 @map("every_n_months") @db.SmallInt
-  months            Int[]                @default([]) @db.SmallInt
-  startMonth        DateTime             @map("start_month") @db.Date
-  endMonth          DateTime?            @map("end_month") @db.Date
-  kind              ObligationKind       @default(bill)
-  loanType          LoanType?            @map("loan_type")
-  principalMkd      Int?                 @map("principal_mkd")
-  annualRateBp      Int?                 @map("annual_rate_bp")
+  id                  String               @id @default(uuid()) @db.Uuid
+  userId              String               @map("user_id") @db.Uuid
+  categoryId          String               @map("category_id") @db.Uuid
+  name                String
+  payee               String?
+  expectedAmountMkd   Int                  @map("expected_amount_mkd")
+  dueDay              Int                  @map("due_day") @db.SmallInt
+  recurrence          ObligationRecurrence
+  everyNMonths        Int?                 @map("every_n_months") @db.SmallInt
+  months              Int[]                @default([]) @db.SmallInt
+  startMonth          DateTime             @map("start_month") @db.Date
+  endMonth            DateTime?            @map("end_month") @db.Date
+  kind                ObligationKind       @default(bill)
+  loanType            LoanType?            @map("loan_type")
+  principalMkd        Int?                 @map("principal_mkd")
+  annualRateBp        Int?                 @map("annual_rate_bp")
   /// Installment plans only: what the whole purchase costs, and the first installment. The regular
   /// installment is expectedAmountMkd.
-  contractTotalMkd     Int?              @map("contract_total_mkd")
-  firstInstallmentMkd  Int?              @map("first_installment_mkd")
+  contractTotalMkd    Int?                 @map("contract_total_mkd")
+  firstInstallmentMkd Int?                 @map("first_installment_mkd")
   /// Set when a bill or loan with payments is taken out of use: it is hidden and makes no more
   /// bills, but its paid bills stay, so history and totals do not change.
-  archivedAt        DateTime?            @map("archived_at")
+  archivedAt          DateTime?            @map("archived_at")
   /// The group this obligation is a line of (NM-17); null for a stand-alone obligation.
-  groupId           String?              @map("group_id") @db.Uuid
-  createdAt         DateTime             @default(now()) @map("created_at")
-  updatedAt         DateTime             @updatedAt @map("updated_at")
+  groupId             String?              @map("group_id") @db.Uuid
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// NoAction: a category in use cannot be deleted; deleting the whole user still works because both cascade.
-  category Category @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+  category      Category           @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
   /// NoAction: a group with lines cannot be deleted.
-  group    ObligationGroup? @relation(fields: [groupId, userId], references: [id, userId], onDelete: NoAction)
-  bills    Bill[]
-  rateChanges LoanRateChange[]
+  group         ObligationGroup?   @relation(fields: [groupId, userId], references: [id, userId], onDelete: NoAction)
+  bills         Bill[]
+  rateChanges   LoanRateChange[]
   extraPayments LoanExtraPayment[]
 
   /// Lets bills reference (obligation, owner) together, so a bill can never point at another user's obligation.
@@ -262,14 +264,14 @@ model ObligationGroup {
 /// loan's own rate and payment are the terms of its first month. At most one change per loan and
 /// month; a second one for the same month replaces the first.
 model LoanRateChange {
-  id               String   @id @default(uuid()) @db.Uuid
-  userId           String   @map("user_id") @db.Uuid
-  obligationId     String   @map("obligation_id") @db.Uuid
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  obligationId      String   @map("obligation_id") @db.Uuid
   /// The first month the new terms apply: the first day of that month.
-  effectiveMonth   DateTime @map("effective_month") @db.Date
-  annualRateBp     Int      @map("annual_rate_bp")
-  monthlyPaymentMkd Int     @map("monthly_payment_mkd")
-  createdAt        DateTime @default(now()) @map("created_at")
+  effectiveMonth    DateTime @map("effective_month") @db.Date
+  annualRateBp      Int      @map("annual_rate_bp")
+  monthlyPaymentMkd Int      @map("monthly_payment_mkd")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Cascade: the changes are details of the loan and go with it (deleting an obligation, NM-18).
@@ -370,4 +372,49 @@ model ExchangeRate {
   @@unique([userId, effectiveFrom])
   @@index([userId])
   @@map("exchange_rates")
+}
+
+/// Something to save toward (NM-50). kind: target | target_date | monthly. The amount saved so far
+/// is the sum of its contributions, never stored on the goal itself.
+model SavingsGoal {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String
+  kind        String
+  /// Whole denars to reach; null for a monthly goal.
+  targetMkd   Int?      @map("target_mkd")
+  /// The first day of the last month money may be added; target_date goals only.
+  targetMonth DateTime? @map("target_month") @db.Date
+  /// Planned amount per month; required for monthly goals.
+  monthlyMkd  Int?      @map("monthly_mkd")
+  /// 1 = high, 2 = normal, 3 = low.
+  priority    Int       @default(2) @db.SmallInt
+  archivedAt  DateTime? @map("archived_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions GoalContribution[]
+
+  @@unique([id, userId])
+  @@index([userId])
+  @@map("savings_goals")
+}
+
+/// Money put into (positive) or taken out of (negative) a goal on a day.
+model GoalContribution {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  goalId     String   @map("goal_id") @db.Uuid
+  amountMkd  Int      @map("amount_mkd")
+  occurredOn DateTime @map("occurred_on") @db.Date
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal SavingsGoal @relation(fields: [goalId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([goalId])
+  @@map("goal_contributions")
 }

@@ -11,3 +11,5 @@ export * from './monthly-summary.js';
 export * from './monthly-totals.js';
 export * from './obligation-totals.js';
 export * from './obligations.js';
+export * from './goals.js';
+export * from './health-score.js';

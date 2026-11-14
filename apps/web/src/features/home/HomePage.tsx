@@ -11,6 +11,7 @@ import { currentMonth, formatMonth, shiftMonth } from '../spending/months';
 import { type Currency, useCurrency } from './currency';
 import { AttentionPanel } from './AttentionPanel';
 import { BalanceCheckInPanel } from './BalanceCheckInPanel';
+import { HealthScoreCard } from './HealthScoreCard';
 import { amountChangeView, formatAmount, rateChangeView } from './kpi';
 import { KpiCard } from './KpiCard';
 
@@ -134,6 +135,8 @@ export function HomePage() {
 
       <BalanceCheckInPanel key={month} month={month} />
 
+      <HealthScoreCard />
+
       {load.status === 'loading' && (
         <p className="mt-6 text-gray-500" role="status">
           {t('home.loading')}
@@ -225,6 +228,9 @@ export function HomePage() {
         </Link>
         <Link to="/categories" className="text-emerald-700 underline">
           {t('nav.categories')}
+        </Link>
+        <Link to="/goals" className="text-emerald-700 underline">
+          Goals
         </Link>
         <Link to="/import" className="text-emerald-700 underline">
           {t('nav.import')}

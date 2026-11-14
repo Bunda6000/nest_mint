@@ -12,3 +12,5 @@ export * from './budget-import.js';
 export * from './obligations.js';
 export * from './summary.js';
 export * from './transactions.js';
+export * from './goals.js';
+export * from './health-score.js';

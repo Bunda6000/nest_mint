@@ -4,6 +4,7 @@ import { RegisterPage } from './features/auth/RegisterPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { BudgetGridPage } from './features/budget/BudgetGridPage';
 import { CategoriesPage } from './features/categories/CategoriesPage';
+import { GoalsPage } from './features/goals/GoalsPage';
 import { HomePage } from './features/home/HomePage';
 import { ImportPage } from './features/import/ImportPage';
 import { SettingsPage } from './features/settings/SettingsPage';
@@ -28,6 +29,14 @@ export const routes: RouteObject[] = [
     element: (
       <RequireAuth>
         <BudgetGridPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/goals',
+    element: (
+      <RequireAuth>
+        <GoalsPage />
       </RequireAuth>
     ),
   },
