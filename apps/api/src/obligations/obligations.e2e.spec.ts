@@ -636,4 +636,77 @@ describe.skipIf(!process.env.DATABASE_URL)('obligations', () => {
       }
     });
   });
+  describe('groups', () => {
+    it('refuses the endpoints without a login', async () => {
+      const id = '3f0f6c1e-8d6a-4b7e-9c55-0a1b2c3d4e5f';
+      await e2e.http().post('/api/v1/obligations/groups').send({}).expect(401);
+      await e2e.http().patch(`/api/v1/obligations/groups/${id}`).send({}).expect(401);
+      await e2e.http().delete(`/api/v1/obligations/groups/${id}`).expect(401);
+    });
+
+    it('creates a group, adds lines with their own amounts and lists both', async () => {
+      const user = await e2e.newUser();
+      const group = (await e2e.post('/obligations/groups', user, { name: 'Streaming' }).expect(201))
+        .body as { id: string; name: string };
+      expect(group.name).toBe('Streaming');
+      for (const [name, amount] of [
+        ['Netflix', 600],
+        ['Disney', 300],
+      ] as const) {
+        const line = (
+          await e2e
+            .post(
+              '/obligations',
+              user,
+              await bill(user, { name, expectedAmountMkd: amount, groupId: group.id }),
+            )
+            .expect(201)
+        ).body as ObligationResponse;
+        expect(line).toMatchObject({ groupId: group.id, groupName: 'Streaming' });
+      }
+      const list = (await e2e.get('/obligations', user).expect(200)).body as ObligationsResponse;
+      expect(list.groups).toEqual([group]);
+      expect(list.obligations.map((o) => [o.name, o.expectedAmountMkd, o.groupId])).toEqual([
+        ['Disney', 300, group.id],
+        ['Netflix', 600, group.id],
+      ]);
+    });
+
+    it('refuses a duplicate name (409) and a bad name (400)', async () => {
+      const user = await e2e.newUser();
+      await e2e.post('/obligations/groups', user, { name: 'Streaming' }).expect(201);
+      await e2e.post('/obligations/groups', user, { name: 'streaming' }).expect(409);
+      const bad = await e2e.post('/obligations/groups', user, { name: ' ' }).expect(400);
+      expect(Object.keys(errorOf(bad.body).details ?? {})).toContain('name');
+    });
+
+    it('renames a group and deletes it once it is empty', async () => {
+      const user = await e2e.newUser();
+      const group = (await e2e.post('/obligations/groups', user, { name: 'Cars' }).expect(201))
+        .body as { id: string };
+      await e2e.patch(`/obligations/groups/${group.id}`, user, { name: 'Tucson' }).expect(200);
+      const line = (
+        await e2e.post('/obligations', user, await bill(user, { groupId: group.id })).expect(201)
+      ).body as ObligationResponse;
+      await e2e.delete(`/obligations/groups/${group.id}`, user).expect(409);
+      await e2e.patch(`/obligations/${line.id}`, user, { groupId: null }).expect(200);
+      await e2e.delete(`/obligations/groups/${group.id}`, user).expect(204);
+      expect(((await e2e.get('/obligations', user)).body as ObligationsResponse).groups).toEqual(
+        [],
+      );
+    });
+
+    it("keeps users apart: another user's group is 404 everywhere", async () => {
+      const owner = await e2e.newUser();
+      const other = await e2e.newUser();
+      const group = (await e2e.post('/obligations/groups', owner, { name: 'Cars' }).expect(201))
+        .body as { id: string };
+      await e2e.post('/obligations', other, await bill(other, { groupId: group.id })).expect(404);
+      await e2e.patch(`/obligations/groups/${group.id}`, other, { name: 'X' }).expect(404);
+      await e2e.delete(`/obligations/groups/${group.id}`, other).expect(404);
+      expect(((await e2e.get('/obligations', other)).body as ObligationsResponse).groups).toEqual(
+        [],
+      );
+    });
+  });
 });

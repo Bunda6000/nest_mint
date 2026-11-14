@@ -1,14 +1,19 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import {
   type CreateInstallmentData,
   createInstallmentSchema,
   type CreateLoanData,
+  type CreateObligationGroupData,
+  createObligationGroupSchema,
   createLoanSchema,
   type CreateObligationData,
   createObligationSchema,
+  type ObligationGroupResponse,
   type ObligationResponse,
   type ObligationsResponse,
   type UpdateObligationData,
+  type UpdateObligationGroupData,
+  updateObligationGroupSchema,
   updateObligationSchema,
 } from '@nestmint/shared';
 import { type AuthenticatedUser, CurrentUser } from '../auth/current-user.decorator.js';
@@ -49,6 +54,34 @@ export class ObligationsController {
     body: CreateInstallmentData,
   ): Promise<ObligationResponse> {
     return this.obligations.createInstallment(user.id, body);
+  }
+
+  @Post('groups')
+  createGroup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe<CreateObligationGroupData>(createObligationGroupSchema))
+    body: CreateObligationGroupData,
+  ): Promise<ObligationGroupResponse> {
+    return this.obligations.createGroup(user.id, body);
+  }
+
+  @Patch('groups/:id')
+  renameGroup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', UuidParamPipe) id: string,
+    @Body(new ZodValidationPipe<UpdateObligationGroupData>(updateObligationGroupSchema))
+    body: UpdateObligationGroupData,
+  ): Promise<ObligationGroupResponse> {
+    return this.obligations.renameGroup(user.id, id, body);
+  }
+
+  @Delete('groups/:id')
+  @HttpCode(204)
+  removeGroup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', UuidParamPipe) id: string,
+  ): Promise<void> {
+    return this.obligations.removeGroup(user.id, id);
   }
 
   @Patch(':id')

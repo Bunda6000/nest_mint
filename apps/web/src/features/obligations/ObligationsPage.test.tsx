@@ -24,6 +24,7 @@ interface Obl {
   startMonth: string;
   endMonth: string | null;
   kind?: 'bill' | 'loan' | 'installment';
+  groupId?: string | null;
   installment?: {
     contractTotalMkd: number;
     firstInstallmentMkd: number;
@@ -74,8 +75,12 @@ interface Call {
   body?: Record<string, unknown>;
 }
 
-function fakeApi(initial: Obl[] = [electricity()]) {
+function fakeApi(
+  initial: Obl[] = [electricity()],
+  initialGroups: { id: string; name: string }[] = [],
+) {
   const data = [...initial];
+  const groupRows = initialGroups.map((g) => ({ ...g }));
   const calls: Call[] = [];
   let failLoads = 0;
   let failPost: { status: number; error: Record<string, unknown> } | null = null;
@@ -102,7 +107,10 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       return reply(200, { groups });
     }
     if (method === 'GET' && path === '/obligations') {
-      return reply(200, { obligations: [...data].sort((a, b) => a.name.localeCompare(b.name)) });
+      return reply(200, {
+        obligations: [...data].sort((a, b) => a.name.localeCompare(b.name)),
+        groups: groupRows,
+      });
     }
     if (method === 'POST' && path === '/obligations') {
       if (holdPost) {
@@ -128,6 +136,7 @@ function fakeApi(initial: Obl[] = [electricity()]) {
         months: (body?.months as number[] | undefined) ?? null,
         startMonth: String(body?.startMonth),
         endMonth: (body?.endMonth as string | null | undefined) ?? null,
+        groupId: (body?.groupId as string | undefined) ?? null,
       };
       data.push(created);
       return reply(201, created);
@@ -162,6 +171,35 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       };
       data.push(created);
       return reply(201, created);
+    }
+    if (method === 'POST' && path === '/obligations/groups') {
+      const name = String(body?.name);
+      if (groupRows.some((g) => g.name.toLowerCase() === name.toLowerCase())) {
+        return reply(409, {
+          error: {
+            code: 'CONFLICT',
+            message: 'You already have a group with this name.',
+            details: { name: 'Already used' },
+          },
+        });
+      }
+      const created = { id: `g${groupRows.length + 10}`, name };
+      groupRows.push(created);
+      return reply(201, created);
+    }
+    const groupMatch = /^\/obligations\/groups\/([^/]+)$/.exec(path);
+    if (groupMatch && method === 'PATCH') {
+      const group = groupRows.find((g) => g.id === groupMatch[1]);
+      if (!group) return reply(404, { error: { code: 'NOT_FOUND', message: 'Group not found.' } });
+      group.name = String(body?.name);
+      return reply(200, group);
+    }
+    if (groupMatch && method === 'DELETE') {
+      const index = groupRows.findIndex((g) => g.id === groupMatch[1]);
+      if (index < 0)
+        return reply(404, { error: { code: 'NOT_FOUND', message: 'Group not found.' } });
+      groupRows.splice(index, 1);
+      return new Response(null, { status: 204 });
     }
     if (method === 'POST' && path === '/obligations/installments') {
       const created: Obl = {
@@ -280,6 +318,7 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       calls.filter((c) => c.method === 'POST' && /\/(extra-payments|payoff)$/.test(c.path)),
     rateChangePosts: () =>
       calls.filter((c) => c.method === 'POST' && c.path.endsWith('/rate-changes')),
+    groupCalls: () => calls.filter((c) => c.path.startsWith('/obligations/groups')),
     installmentPosts: () =>
       calls.filter((c) => c.method === 'POST' && c.path === '/obligations/installments'),
     loanPosts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations/loans'),
@@ -1164,5 +1203,98 @@ describe('ObligationsPage: installment plans', () => {
     await user.click(screen.getByRole('button', { name: 'Save installment plan' }));
     expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
     expect(api.installmentPosts()).toHaveLength(0);
+  });
+});
+
+describe('ObligationsPage: groups', () => {
+  const line = (over: Partial<Obl>): Obl => ({ ...electricity(), ...over });
+  const streaming = { id: 'g1', name: 'Streaming' };
+
+  it('shows a group with its lines apart from stand-alone bills', async () => {
+    fakeApi(
+      [
+        line({ id: 'n1', name: 'Netflix', expectedAmountMkd: 600, groupId: 'g1' }),
+        line({ id: 'd1', name: 'Disney', expectedAmountMkd: 300, groupId: 'g1' }),
+        line({ id: 'w1', name: 'Water', groupId: null }),
+      ],
+      [streaming],
+    );
+    renderPage();
+    await loaded();
+    const group = within(screen.getByRole('region', { name: 'Group Streaming' }));
+    expect(group.getByText('2 lines · every month 900 MKD')).toBeTruthy();
+    expect(group.getByText('Netflix')).toBeTruthy();
+    expect(group.getByText('Disney')).toBeTruthy();
+    expect(group.queryByText('Water')).toBeNull();
+    expect(screen.getByText('Water')).toBeTruthy();
+  });
+
+  it('adds a group', async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Add a group/ }));
+    await user.type(screen.getByLabelText('Group name'), 'Streaming');
+    await user.click(screen.getByRole('button', { name: 'Save group' }));
+    expect(await screen.findByRole('region', { name: 'Group Streaming' })).toBeTruthy();
+    expect(api.groupCalls()[0]!.body).toEqual({ name: 'Streaming' });
+    expect(screen.getByText('No lines yet. Add Netflix, fuel and the like.')).toBeTruthy();
+  });
+
+  it("shows the server's message for a name already used", async () => {
+    fakeApi([], [streaming]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Add a group/ }));
+    await user.type(screen.getByLabelText('Group name'), 'streaming');
+    await user.click(screen.getByRole('button', { name: 'Save group' }));
+    expect(await screen.findByText('Already used')).toBeTruthy();
+  });
+
+  it('adds a line to a group with its own amount and the group id', async () => {
+    const api = fakeApi([], [streaming]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add a line to Streaming' }));
+    await user.type(screen.getByLabelText('Name'), 'Netflix');
+    await user.click(screen.getByLabelText('Water'));
+    await user.type(screen.getByLabelText(/Usual amount/), '600');
+    await user.type(screen.getByLabelText(/Due day/), '5');
+    await user.click(screen.getByRole('button', { name: 'Save line' }));
+    await waitFor(() => expect(api.posts()).toHaveLength(1));
+    expect(api.posts()[0]!.body).toMatchObject({ name: 'Netflix', groupId: 'g1' });
+    expect(
+      within(await screen.findByRole('region', { name: 'Group Streaming' })).getByText('Netflix'),
+    ).toBeTruthy();
+  });
+
+  it('renames a group and deletes it only while it has no lines', async () => {
+    const api = fakeApi([line({ id: 'n1', name: 'Netflix', groupId: 'g1' })], [streaming]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    expect(screen.queryByRole('button', { name: 'Delete group Streaming' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Rename Streaming' }));
+    const box = screen.getByLabelText('Group name');
+    await user.clear(box);
+    await user.type(box, 'TV');
+    await user.click(screen.getByRole('button', { name: 'Save name' }));
+    expect(await screen.findByRole('region', { name: 'Group TV' })).toBeTruthy();
+    expect(api.groupCalls()[0]).toMatchObject({ method: 'PATCH', body: { name: 'TV' } });
+  });
+
+  it('deletes an empty group', async () => {
+    const api = fakeApi([], [streaming]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Delete group Streaming' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Group Streaming' })).toBeNull(),
+    );
+    expect(api.groupCalls()[0]!.method).toBe('DELETE');
   });
 });

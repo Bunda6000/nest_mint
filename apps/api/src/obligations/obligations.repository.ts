@@ -2,6 +2,7 @@ import type {
   ExtraPaymentKind,
   LoanDetails,
   LoanType,
+  ObligationGroupResponse,
   ObligationRecurrence,
   ObligationResponse,
   RateChangeResponse,
@@ -13,6 +14,8 @@ export interface NewObligation {
   name: string;
   payee: string | null;
   categoryId: string;
+  /** A group of the same user, or null/absent for a stand-alone obligation. */
+  groupId?: string | null;
   /** Whole denars, above 0. */
   expectedAmountMkd: number;
   dueDay: number;
@@ -35,6 +38,8 @@ export interface ObligationChange {
   name?: string;
   payee?: string | null;
   categoryId?: string;
+  /** `null` takes the obligation out of its group. */
+  groupId?: string | null;
   expectedAmountMkd?: number;
   dueDay?: number;
   startMonth?: string;
@@ -89,4 +94,21 @@ export interface ObligationsRepository {
 
   /** Hides the obligation and stops it making bills. `false` when there is none in use. */
   archive(userId: string, id: string): Promise<boolean>;
+
+  /** The user's groups by name. */
+  listGroups(userId: string): Promise<ObligationGroupResponse[]>;
+
+  /** `null` when the user has no such group. */
+  findGroup(userId: string, id: string): Promise<ObligationGroupResponse | null>;
+
+  createGroup(userId: string, name: string): Promise<ObligationGroupResponse>;
+
+  /** `null` when the user has no such group. */
+  renameGroup(userId: string, id: string, name: string): Promise<ObligationGroupResponse | null>;
+
+  /**
+   * Deletes a group that has no lines (archived ones count, since they still point at it).
+   * `not_empty` leaves it alone.
+   */
+  removeGroup(userId: string, id: string): Promise<'removed' | 'not_found' | 'not_empty'>;
 }

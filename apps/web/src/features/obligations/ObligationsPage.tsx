@@ -4,6 +4,7 @@ import type {
   CreateInstallmentData,
   CreateLoanData,
   CreateObligationData,
+  ObligationResponse,
   CreateRateChangeData,
   PayOffLoanData,
   ObligationsResponse,
@@ -11,7 +12,9 @@ import type {
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { GroupNameForm } from './GroupNameForm';
 import { InstallmentForm } from './InstallmentForm';
+import { ObligationGroupCard } from './ObligationGroupCard';
 import { LoanForm } from './LoanForm';
 import { ObligationForm } from './ObligationForm';
 import { ObligationItem } from './ObligationItem';
@@ -47,6 +50,7 @@ export function ObligationsPage() {
   const [attempt, setAttempt] = useState(0);
   const [adding, setAdding] = useState<'bill' | 'loan' | 'installment' | null>(null);
   const [editing, setEditing] = useState(false);
+  const [addingGroup, setAddingGroup] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -69,6 +73,27 @@ export function ObligationsPage() {
   async function add(values: CreateObligationData) {
     await authedSend('POST', '/obligations', values);
     setAdding(null);
+    reload();
+  }
+
+  async function addLine(groupId: string, values: CreateObligationData) {
+    await authedSend('POST', '/obligations', { ...values, groupId });
+    reload();
+  }
+
+  async function addGroup(name: string) {
+    await authedSend('POST', '/obligations/groups', { name });
+    setAddingGroup(false);
+    reload();
+  }
+
+  async function renameGroup(id: string, name: string) {
+    await authedSend('PATCH', `/obligations/groups/${id}`, { name });
+    reload();
+  }
+
+  async function removeGroup(id: string) {
+    await authedSend('DELETE', `/obligations/groups/${id}`);
     reload();
   }
 
@@ -129,8 +154,28 @@ export function ObligationsPage() {
     reload();
   }
 
-  const busy = adding !== null || editing;
+  const busy = adding !== null || editing || addingGroup;
   const groups = page.status === 'ready' ? page.data.groups : [];
+  const all = page.status === 'ready' ? page.data.obligations.obligations : [];
+  const lineGroups = page.status === 'ready' ? page.data.obligations.groups : [];
+  const standAlone = all.filter((o) => !o.groupId);
+
+  const renderItem = (obligation: ObligationResponse) => (
+    <ObligationItem
+      key={obligation.id}
+      obligation={obligation}
+      groups={groups}
+      locked={busy}
+      onEditing={setEditing}
+      onEdit={(values) => edit(obligation.id, values)}
+      onEditLoan={(values) => editLoan(obligation.id, values)}
+      onRateChange={(values) => changeRate(obligation.id, values)}
+      onExtraPayment={(values) => addExtraPayment(obligation.id, values)}
+      onPayOff={(values) => payOff(obligation.id, values)}
+      onDelete={() => remove(obligation.id)}
+      onArchive={() => archive(obligation.id)}
+    />
+  );
 
   return (
     <section className="mx-auto max-w-md p-6">
@@ -198,7 +243,7 @@ export function ObligationsPage() {
             <div className="mt-6 flex flex-col gap-3">
               <button
                 type="button"
-                disabled={editing}
+                disabled={editing || addingGroup}
                 onClick={() => setAdding('bill')}
                 className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white disabled:opacity-50"
               >
@@ -206,7 +251,7 @@ export function ObligationsPage() {
               </button>
               <button
                 type="button"
-                disabled={editing}
+                disabled={editing || addingGroup}
                 onClick={() => setAdding('loan')}
                 className="w-full rounded-lg border border-emerald-700 px-4 py-3 font-medium text-emerald-700 disabled:opacity-50"
               >
@@ -214,39 +259,61 @@ export function ObligationsPage() {
               </button>
               <button
                 type="button"
-                disabled={editing}
+                disabled={editing || addingGroup}
                 onClick={() => setAdding('installment')}
                 className="w-full rounded-lg border border-emerald-700 px-4 py-3 font-medium text-emerald-700 disabled:opacity-50"
               >
                 Add an installment plan
               </button>
+              <button
+                type="button"
+                disabled={editing || addingGroup}
+                onClick={() => setAddingGroup(true)}
+                className="w-full rounded-lg border border-emerald-700 px-4 py-3 font-medium text-emerald-700 disabled:opacity-50"
+              >
+                Add a group (Streaming, a car…)
+              </button>
             </div>
           )}
 
-          {page.data.obligations.obligations.length === 0 ? (
+          {addingGroup && (
+            <div className="mt-6 rounded-lg border p-4">
+              <p className="mb-3 font-medium">Add a group</p>
+              <GroupNameForm
+                submitLabel="Save group"
+                onSave={addGroup}
+                onCancel={() => setAddingGroup(false)}
+              />
+            </div>
+          )}
+
+          {lineGroups.map((group) => (
+            <ObligationGroupCard
+              key={group.id}
+              group={group}
+              lines={all.filter((o) => o.groupId === group.id)}
+              categoryGroups={groups}
+              locked={busy}
+              onBusy={setEditing}
+              onAddLine={(values) => addLine(group.id, values)}
+              onRename={(name) => renameGroup(group.id, name)}
+              onDelete={() => removeGroup(group.id)}
+            >
+              {all.filter((o) => o.groupId === group.id).map(renderItem)}
+            </ObligationGroupCard>
+          ))}
+
+          {all.length === 0 && lineGroups.length === 0 ? (
             <p className="mt-4 text-sm text-gray-500">
               No recurring bills yet. Add electricity, water, rent and the like, and each month's
               bills appear here by themselves.
             </p>
           ) : (
-            <ul className="mt-4 flex flex-col divide-y rounded-lg border">
-              {page.data.obligations.obligations.map((obligation) => (
-                <ObligationItem
-                  key={obligation.id}
-                  obligation={obligation}
-                  groups={groups}
-                  locked={busy}
-                  onEditing={setEditing}
-                  onEdit={(values) => edit(obligation.id, values)}
-                  onEditLoan={(values) => editLoan(obligation.id, values)}
-                  onRateChange={(values) => changeRate(obligation.id, values)}
-                  onExtraPayment={(values) => addExtraPayment(obligation.id, values)}
-                  onPayOff={(values) => payOff(obligation.id, values)}
-                  onDelete={() => remove(obligation.id)}
-                  onArchive={() => archive(obligation.id)}
-                />
-              ))}
-            </ul>
+            standAlone.length > 0 && (
+              <ul className="mt-4 flex flex-col divide-y rounded-lg border">
+                {standAlone.map(renderItem)}
+              </ul>
+            )
           )}
         </>
       )}

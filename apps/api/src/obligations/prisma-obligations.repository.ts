@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type {
   ExtraPaymentKind,
   LoanType,
+  ObligationGroupResponse,
   ObligationKind,
   ObligationRecurrence,
   ObligationResponse,
@@ -21,6 +22,7 @@ const select = {
   name: true,
   payee: true,
   categoryId: true,
+  groupId: true,
   expectedAmountMkd: true,
   dueDay: true,
   recurrence: true,
@@ -36,6 +38,7 @@ const select = {
   firstInstallmentMkd: true,
   createdAt: true,
   category: { select: { name: true } },
+  group: { select: { name: true } },
   rateChanges: {
     select: { effectiveMonth: true, annualRateBp: true, monthlyPaymentMkd: true },
     orderBy: { effectiveMonth: 'asc' },
@@ -51,6 +54,7 @@ interface Row {
   name: string;
   payee: string | null;
   categoryId: string;
+  groupId: string | null;
   expectedAmountMkd: number;
   dueDay: number;
   recurrence: ObligationRecurrence;
@@ -66,6 +70,7 @@ interface Row {
   firstInstallmentMkd: number | null;
   createdAt: Date;
   category: { name: string };
+  group: { name: string } | null;
   rateChanges: { effectiveMonth: Date; annualRateBp: number; monthlyPaymentMkd: number }[];
   extraPayments: { id: string; paidOn: Date; amountMkd: number; kind: ExtraPaymentKind }[];
 }
@@ -91,6 +96,8 @@ const toResponse = (row: Row, paidAmounts: readonly number[] = []): ObligationRe
   endMonth: month(row.endMonth),
   createdMonth: month(row.createdAt)!,
   kind: row.kind,
+  groupId: row.groupId,
+  groupName: row.group?.name ?? null,
   loan:
     row.kind === 'loan' &&
     row.loanType !== null &&
@@ -134,6 +141,7 @@ export class PrismaObligationsRepository implements ObligationsRepository {
         id: randomUUID(),
         userId,
         categoryId: input.categoryId,
+        groupId: input.groupId ?? null,
         name: input.name,
         payee: input.payee,
         expectedAmountMkd: input.expectedAmountMkd,
@@ -213,6 +221,7 @@ export class PrismaObligationsRepository implements ObligationsRepository {
         ...(change.name !== undefined ? { name: change.name } : {}),
         ...(change.payee !== undefined ? { payee: change.payee } : {}),
         ...(change.categoryId !== undefined ? { categoryId: change.categoryId } : {}),
+        ...(change.groupId !== undefined ? { groupId: change.groupId } : {}),
         ...(change.expectedAmountMkd !== undefined
           ? { expectedAmountMkd: change.expectedAmountMkd }
           : {}),
@@ -293,5 +302,48 @@ export class PrismaObligationsRepository implements ObligationsRepository {
       data: { archivedAt: new Date() },
     });
     return count > 0;
+  }
+
+  async listGroups(userId: string): Promise<ObligationGroupResponse[]> {
+    const groups = await this.prisma.obligationGroup.findMany({
+      where: { userId },
+      select: { id: true, name: true },
+    });
+    return groups.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+  }
+
+  async findGroup(userId: string, id: string): Promise<ObligationGroupResponse | null> {
+    return this.prisma.obligationGroup.findFirst({
+      where: { id, userId },
+      select: { id: true, name: true },
+    });
+  }
+
+  async createGroup(userId: string, name: string): Promise<ObligationGroupResponse> {
+    return this.prisma.obligationGroup.create({
+      data: { id: randomUUID(), userId, name },
+      select: { id: true, name: true },
+    });
+  }
+
+  async renameGroup(
+    userId: string,
+    id: string,
+    name: string,
+  ): Promise<ObligationGroupResponse | null> {
+    const { count } = await this.prisma.obligationGroup.updateMany({
+      where: { id, userId },
+      data: { name },
+    });
+    return count === 0 ? null : this.findGroup(userId, id);
+  }
+
+  async removeGroup(userId: string, id: string): Promise<'removed' | 'not_found' | 'not_empty'> {
+    const group = await this.findGroup(userId, id);
+    if (!group) return 'not_found';
+    const lines = await this.prisma.obligation.count({ where: { groupId: id, userId } });
+    if (lines > 0) return 'not_empty';
+    await this.prisma.obligationGroup.deleteMany({ where: { id, userId } });
+    return 'removed';
   }
 }

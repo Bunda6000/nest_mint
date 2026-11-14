@@ -90,6 +90,17 @@ export interface InstallmentDetails {
   installmentsLeft: number;
 }
 
+export const MAX_GROUP_NAME_LENGTH = 60;
+
+/**
+ * Obligations that belong together, such as "Streaming" (Netflix, Disney) or "Hyundai Tucson"
+ * (fuel, insurance). Each line is an ordinary obligation with its own amount and category.
+ */
+export interface ObligationGroupResponse {
+  id: string;
+  name: string;
+}
+
 /** An obligation as shown in lists. Amounts are whole denars. Fields of the other recurrences are null. */
 export interface ObligationResponse {
   id: string;
@@ -114,6 +125,9 @@ export interface ObligationResponse {
   /** The month it was entered, "YYYY-MM". Bills missed since then are created when catching up. */
   createdMonth: string;
   kind: ObligationKind;
+  /** The group this obligation is a line of; null when it stands alone. */
+  groupId: string | null;
+  groupName: string | null;
   /** Only for loans (`kind` is "loan"); `expectedAmountMkd` is then the monthly payment. */
   loan: LoanDetails | null;
   /** Only for installment plans (`kind` is "installment"). */
@@ -122,6 +136,8 @@ export interface ObligationResponse {
 
 export interface ObligationsResponse {
   obligations: ObligationResponse[];
+  /** All of the user's groups by name, including ones without lines yet. */
+  groups: ObligationGroupResponse[];
 }
 
 const nameSchema = z
@@ -165,8 +181,12 @@ const monthsSchema = z
   .min(1, 'Choose at least one month')
   .transform((months) => [...new Set(months)].sort((a, b) => a - b));
 
+/** `null` or left out means the obligation stands alone. */
+const groupIdSchema = z.uuid('Choose a group').nullable().optional();
+
 const common = {
   name: nameSchema,
+  groupId: groupIdSchema,
   payee: payeeSchema,
   categoryId: categoryIdSchema,
   expectedAmountMkd: amountMkdSchema,
@@ -206,6 +226,20 @@ export const createObligationSchema = z.discriminatedUnion(
 
 export type CreateObligationInput = z.input<typeof createObligationSchema>;
 export type CreateObligationData = z.output<typeof createObligationSchema>;
+
+const groupNameSchema = z
+  .string({ error: 'Enter a name' })
+  .trim()
+  .min(1, 'Enter a name')
+  .max(MAX_GROUP_NAME_LENGTH, `Name must be at most ${MAX_GROUP_NAME_LENGTH} characters`);
+
+/** A group is just a name; lines join it when they are created or edited with its `groupId`. */
+export const createObligationGroupSchema = z.object({ name: groupNameSchema }).strict();
+export type CreateObligationGroupInput = z.input<typeof createObligationGroupSchema>;
+export type CreateObligationGroupData = z.output<typeof createObligationGroupSchema>;
+
+export const updateObligationGroupSchema = createObligationGroupSchema;
+export type UpdateObligationGroupData = CreateObligationGroupData;
 
 const lenderSchema = z
   .string({ error: 'Enter the lender' })
@@ -362,6 +396,8 @@ export const updateObligationSchema = z
     name: nameSchema.optional(),
     payee: payeeSchema,
     categoryId: categoryIdSchema.optional(),
+    /** A group to join, or null to leave the group it is in. */
+    groupId: groupIdSchema,
     expectedAmountMkd: amountMkdSchema.optional(),
     dueDay: dueDaySchema.optional(),
     startMonth: monthSchema.optional(),

@@ -3,6 +3,7 @@ import { fieldErrors } from './auth/register.js';
 import { END_BEFORE_START } from './income.js';
 import {
   createExtraPaymentSchema,
+  createObligationGroupSchema,
   createInstallmentSchema,
   createLoanSchema,
   createRateChangeSchema,
@@ -437,5 +438,30 @@ describe('createInstallmentSchema', () => {
     expect(createInstallmentSchema.safeParse({ ...kirby, endMonth: '2027-11' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('obligation groups', () => {
+  it('accepts a group name, trimmed', () => {
+    const result = createObligationGroupSchema.safeParse({ name: '  Streaming ' });
+    expect(result.success && result.data.name).toBe('Streaming');
+  });
+
+  it.each([{ name: ' ' }, { name: 'x'.repeat(61) }, {}, { name: 'A', extra: 1 }])(
+    'refuses %j',
+    (body) => {
+      expect(createObligationGroupSchema.safeParse(body).success).toBe(false);
+    },
+  );
+
+  it('lets a bill join a group, or leave it when updating', () => {
+    expect(createObligationSchema.safeParse({ ...electricity, groupId: categoryId }).success).toBe(
+      true,
+    );
+    expect(createObligationSchema.safeParse({ ...electricity, groupId: 'nope' }).success).toBe(
+      false,
+    );
+    expect(updateObligationSchema.safeParse({ groupId: null }).success).toBe(true);
+    expect(updateObligationSchema.safeParse({ groupId: categoryId }).success).toBe(true);
   });
 });

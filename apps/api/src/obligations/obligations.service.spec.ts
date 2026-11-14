@@ -134,7 +134,7 @@ describe('list', () => {
   });
 
   it('is empty for a new user', async () => {
-    expect(await service.list('nobody')).toEqual({ obligations: [] });
+    expect(await service.list('nobody')).toEqual({ obligations: [], groups: [] });
   });
 });
 
@@ -479,5 +479,71 @@ describe('createInstallment', () => {
       expect(error.getStatus()).toBe(400);
       expect(detailsOf(error)).toHaveProperty(field);
     }
+  });
+});
+
+describe('groups (lines of one obligation)', () => {
+  it('creates, lists by name and renames groups, refusing a name already used', async () => {
+    const streaming = await service.createGroup(A, { name: 'Streaming' });
+    await service.createGroup(A, { name: 'Cars' });
+    expect((await service.list(A)).groups.map((g) => g.name)).toEqual(['Cars', 'Streaming']);
+
+    expect((await failure(service.createGroup(A, { name: 'streaming' }))).getStatus()).toBe(409);
+    expect(
+      (await failure(service.renameGroup(A, streaming.id, { name: 'CARS' }))).getStatus(),
+    ).toBe(409);
+    expect(await service.renameGroup(A, streaming.id, { name: 'STREAMING' })).toEqual({
+      id: streaming.id,
+      name: 'STREAMING',
+    });
+  });
+
+  it('lets two users use the same group name', async () => {
+    await service.createGroup(A, { name: 'Streaming' });
+    await expect(service.createGroup(B, { name: 'Streaming' })).resolves.toMatchObject({
+      name: 'Streaming',
+    });
+  });
+
+  it('adds lines with their own amounts and shows the group on each', async () => {
+    const group = await service.createGroup(A, { name: 'Streaming' });
+    const netflix = await service.create(A, monthly('Netflix', { groupId: group.id }));
+    await service.create(A, monthly('Disney', { expectedAmountMkd: 300, groupId: group.id }));
+    await service.create(A, monthly('Water'));
+    expect(netflix).toMatchObject({ groupId: group.id, groupName: 'Streaming' });
+    const { obligations } = await service.list(A);
+    expect(obligations.map((o) => [o.name, o.groupName])).toEqual([
+      ['Disney', 'Streaming'],
+      ['Netflix', 'Streaming'],
+      ['Water', null],
+    ]);
+  });
+
+  it("refuses another user's group (404) for a new line and for an edit", async () => {
+    const other = await service.createGroup(B, { name: 'Streaming' });
+    expect(
+      (await failure(service.create(A, monthly('Electricity', { groupId: other.id })))).getStatus(),
+    ).toBe(404);
+    const mine = await service.create(A, monthly());
+    expect((await failure(service.update(A, mine.id, { groupId: other.id }))).getStatus()).toBe(
+      404,
+    );
+  });
+
+  it('moves an existing bill into a group and out again', async () => {
+    const group = await service.createGroup(A, { name: 'Streaming' });
+    const bill = await service.create(A, monthly());
+    expect((await service.update(A, bill.id, { groupId: group.id })).groupName).toBe('Streaming');
+    expect((await service.update(A, bill.id, { groupId: null })).groupName).toBeNull();
+  });
+
+  it('deletes an empty group but refuses one that still has lines (409)', async () => {
+    const group = await service.createGroup(A, { name: 'Streaming' });
+    const line = await service.create(A, monthly('Electricity', { groupId: group.id }));
+    expect((await failure(service.removeGroup(A, group.id))).getStatus()).toBe(409);
+    await service.update(A, line.id, { groupId: null });
+    await service.removeGroup(A, group.id);
+    expect((await service.list(A)).groups).toEqual([]);
+    expect((await failure(service.removeGroup(A, group.id))).getStatus()).toBe(404);
   });
 });

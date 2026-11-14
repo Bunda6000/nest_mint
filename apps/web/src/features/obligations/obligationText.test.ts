@@ -19,6 +19,8 @@ const base: ObligationResponse = {
   kind: 'bill',
   loan: null,
   installment: null,
+  groupId: null,
+  groupName: null,
 };
 
 describe('describeWhen', () => {

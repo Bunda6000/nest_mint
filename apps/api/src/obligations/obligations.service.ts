@@ -8,12 +8,15 @@ import {
 import {
   type CreateInstallmentData,
   type CreateLoanData,
+  type CreateObligationGroupData,
   type CreateObligationData,
   END_BEFORE_START,
   ErrorCode,
+  type ObligationGroupResponse,
   type ObligationResponse,
   type ObligationsResponse,
   type UpdateObligationData,
+  type UpdateObligationGroupData,
 } from '@nestmint/shared';
 import {
   CATEGORIES_REPOSITORY,
@@ -46,10 +49,12 @@ export class ObligationsService {
 
   async create(userId: string, input: CreateObligationData): Promise<ObligationResponse> {
     await this.assertCategoryUsable(userId, input.categoryId);
+    if (input.groupId) await this.assertGroupExists(userId, input.groupId);
     return this.obligations.create(userId, {
       name: input.name,
       payee: input.payee ?? null,
       categoryId: input.categoryId,
+      groupId: input.groupId ?? null,
       expectedAmountMkd: input.expectedAmountMkd,
       dueDay: input.dueDay,
       recurrence: input.recurrence,
@@ -142,11 +147,15 @@ export class ObligationsService {
 
   /** By name, so the list reads like the spreadsheet's. */
   async list(userId: string): Promise<ObligationsResponse> {
-    const all = await this.obligations.list(userId);
+    const [all, groups] = await Promise.all([
+      this.obligations.list(userId),
+      this.obligations.listGroups(userId),
+    ]);
     return {
       obligations: [...all].sort((a, b) =>
         a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }),
       ),
+      groups,
     };
   }
 
@@ -213,11 +222,13 @@ export class ObligationsService {
     if (input.categoryId !== undefined && input.categoryId !== existing.categoryId) {
       await this.assertCategoryUsable(userId, input.categoryId);
     }
+    if (input.groupId) await this.assertGroupExists(userId, input.groupId);
 
     const change: ObligationChange = {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.payee !== undefined ? { payee: input.payee } : {}),
       ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+      ...(input.groupId !== undefined ? { groupId: input.groupId } : {}),
       ...(input.expectedAmountMkd !== undefined
         ? { expectedAmountMkd: input.expectedAmountMkd }
         : {}),
@@ -232,6 +243,62 @@ export class ObligationsService {
     const updated = await this.obligations.update(userId, id, change);
     if (!updated) throw notFound('Obligation');
     return updated;
+  }
+
+  async createGroup(
+    userId: string,
+    input: CreateObligationGroupData,
+  ): Promise<ObligationGroupResponse> {
+    await this.assertGroupNameFree(userId, input.name);
+    return this.obligations.createGroup(userId, input.name);
+  }
+
+  async renameGroup(
+    userId: string,
+    id: string,
+    input: UpdateObligationGroupData,
+  ): Promise<ObligationGroupResponse> {
+    await this.assertGroupExists(userId, id);
+    await this.assertGroupNameFree(userId, input.name, id);
+    const renamed = await this.obligations.renameGroup(userId, id, input.name);
+    if (!renamed) throw notFound('Group');
+    return renamed;
+  }
+
+  /** Only an empty group can go; move or delete its lines first. */
+  async removeGroup(userId: string, id: string): Promise<void> {
+    const result = await this.obligations.removeGroup(userId, id);
+    if (result === 'not_found') throw notFound('Group');
+    if (result === 'not_empty') {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        ErrorCode.Conflict,
+        'This group still has lines. Move or delete them first.',
+      );
+    }
+  }
+
+  private async assertGroupExists(userId: string, groupId: string): Promise<void> {
+    if (!(await this.obligations.findGroup(userId, groupId))) throw notFound('Group');
+  }
+
+  /** Names are compared ignoring letter case, as the list is sorted. */
+  private async assertGroupNameFree(
+    userId: string,
+    name: string,
+    exceptId?: string,
+  ): Promise<void> {
+    const taken = (await this.obligations.listGroups(userId)).some(
+      (g) => g.id !== exceptId && g.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (taken) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        ErrorCode.Conflict,
+        'You already have a group with this name.',
+        { name: 'Already used' },
+      );
+    }
   }
 
   /** The category must be the user's own (else "not found") and not archived (else "conflict"). */

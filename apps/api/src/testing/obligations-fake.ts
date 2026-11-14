@@ -1,4 +1,9 @@
-import type { ExtraPaymentKind, ObligationResponse, RateChangeResponse } from '@nestmint/shared';
+import type {
+  ExtraPaymentKind,
+  ObligationGroupResponse,
+  ObligationResponse,
+  RateChangeResponse,
+} from '@nestmint/shared';
 import { installmentDetailsOf } from '../obligations/installment-details.js';
 import type {
   NewObligation,
@@ -6,7 +11,7 @@ import type {
   ObligationsRepository,
 } from '../obligations/obligations.repository.js';
 
-type Row = Omit<ObligationResponse, 'installment'> & {
+type Row = Omit<ObligationResponse, 'installment' | 'groupName'> & {
   userId: string;
   archived: boolean;
   plan: { contractTotalMkd: number; firstInstallmentMkd: number } | null;
@@ -17,6 +22,7 @@ type Row = Omit<ObligationResponse, 'installment'> & {
 /** Keeps each user's obligations apart and lists newest entered first, like the real repository. */
 export class InMemoryObligations implements ObligationsRepository {
   readonly rows: Row[] = [];
+  readonly groups: (ObligationGroupResponse & { userId: string })[] = [];
   private counter = 0;
 
   /** `createdMonth` says which month "now" is, so a test can enter a bill in a chosen month. */
@@ -33,6 +39,7 @@ export class InMemoryObligations implements ObligationsRepository {
       payee: input.payee,
       categoryId: input.categoryId,
       categoryName: this.categoryName(userId, input.categoryId),
+      groupId: input.groupId ?? null,
       expectedAmountMkd: input.expectedAmountMkd,
       dueDay: input.dueDay,
       recurrence: input.recurrence,
@@ -48,7 +55,7 @@ export class InMemoryObligations implements ObligationsRepository {
       archived: false,
     };
     this.rows.push(row);
-    return InMemoryObligations.response(row);
+    return this.response(row);
   }
 
   /** Stands in for the paid bills of an installment plan. */
@@ -61,12 +68,12 @@ export class InMemoryObligations implements ObligationsRepository {
     return this.rows
       .filter((r) => r.userId === userId && !r.archived)
       .reverse()
-      .map((r) => InMemoryObligations.response(r));
+      .map((r) => this.response(r));
   }
 
   async find(userId: string, id: string): Promise<ObligationResponse | null> {
     const row = this.rows.find((r) => r.id === id && r.userId === userId && !r.archived);
-    return row ? InMemoryObligations.response(row) : null;
+    return row ? this.response(row) : null;
   }
 
   async update(
@@ -82,6 +89,7 @@ export class InMemoryObligations implements ObligationsRepository {
       row.categoryId = change.categoryId;
       row.categoryName = this.categoryName(userId, change.categoryId);
     }
+    if (change.groupId !== undefined) row.groupId = change.groupId;
     if (change.expectedAmountMkd !== undefined) row.expectedAmountMkd = change.expectedAmountMkd;
     if (change.dueDay !== undefined) row.dueDay = change.dueDay;
     if (change.startMonth !== undefined) row.startMonth = change.startMonth;
@@ -90,7 +98,7 @@ export class InMemoryObligations implements ObligationsRepository {
     if (change.months !== undefined) row.months = [...change.months];
     if (row.loan && change.loanType !== undefined) row.loan.loanType = change.loanType;
     if (row.loan && change.principalMkd !== undefined) row.loan.principalMkd = change.principalMkd;
-    return InMemoryObligations.response(row);
+    return this.response(row);
   }
 
   async upsertRateChange(
@@ -104,7 +112,7 @@ export class InMemoryObligations implements ObligationsRepository {
     row.loan.rateChanges = [...others, { ...change }].sort((a, b) =>
       a.effectiveMonth.localeCompare(b.effectiveMonth),
     );
-    return InMemoryObligations.response(row);
+    return this.response(row);
   }
 
   async addExtraPayment(
@@ -118,7 +126,7 @@ export class InMemoryObligations implements ObligationsRepository {
       ...row.loan.extraPayments,
       { id: `extra-${++this.counter}`, ...payment },
     ].sort((a, b) => a.paidOn.localeCompare(b.paidOn));
-    return InMemoryObligations.response(row);
+    return this.response(row);
   }
 
   async remove(userId: string, id: string): Promise<boolean> {
@@ -135,13 +143,19 @@ export class InMemoryObligations implements ObligationsRepository {
     return true;
   }
 
-  private static response(row: Row): ObligationResponse {
+  private groupName(row: Row): string | null {
+    return this.groups.find((g) => g.id === row.groupId && g.userId === row.userId)?.name ?? null;
+  }
+
+  private response(row: Row): ObligationResponse {
     return {
       id: row.id,
       name: row.name,
       payee: row.payee,
       categoryId: row.categoryId,
       categoryName: row.categoryName,
+      groupId: row.groupId,
+      groupName: this.groupName(row),
       expectedAmountMkd: row.expectedAmountMkd,
       dueDay: row.dueDay,
       recurrence: row.recurrence,
@@ -167,5 +181,42 @@ export class InMemoryObligations implements ObligationsRepository {
           }
         : null,
     };
+  }
+
+  async listGroups(userId: string): Promise<ObligationGroupResponse[]> {
+    return this.groups
+      .filter((g) => g.userId === userId)
+      .map(({ id, name }) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+  }
+
+  async findGroup(userId: string, id: string): Promise<ObligationGroupResponse | null> {
+    const group = this.groups.find((g) => g.id === id && g.userId === userId);
+    return group ? { id: group.id, name: group.name } : null;
+  }
+
+  async createGroup(userId: string, name: string): Promise<ObligationGroupResponse> {
+    const group = { id: `grp-${++this.counter}`, userId, name };
+    this.groups.push(group);
+    return { id: group.id, name };
+  }
+
+  async renameGroup(
+    userId: string,
+    id: string,
+    name: string,
+  ): Promise<ObligationGroupResponse | null> {
+    const group = this.groups.find((g) => g.id === id && g.userId === userId);
+    if (!group) return null;
+    group.name = name;
+    return { id, name };
+  }
+
+  async removeGroup(userId: string, id: string): Promise<'removed' | 'not_found' | 'not_empty'> {
+    const index = this.groups.findIndex((g) => g.id === id && g.userId === userId);
+    if (index < 0) return 'not_found';
+    if (this.rows.some((r) => r.groupId === id && r.userId === userId)) return 'not_empty';
+    this.groups.splice(index, 1);
+    return 'removed';
   }
 }

@@ -30,6 +30,7 @@ model User {
   transactions   Transaction[]
   incomes        Income[]
   obligations    Obligation[]
+  obligationGroups ObligationGroup[]
   bills          Bill[]
   loanExtraPayments LoanExtraPayment[]
   loanRateChanges LoanRateChange[]
@@ -217,12 +218,16 @@ model Obligation {
   /// Set when a bill or loan with payments is taken out of use: it is hidden and makes no more
   /// bills, but its paid bills stay, so history and totals do not change.
   archivedAt        DateTime?            @map("archived_at")
+  /// The group this obligation is a line of (NM-17); null for a stand-alone obligation.
+  groupId           String?              @map("group_id") @db.Uuid
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// NoAction: a category in use cannot be deleted; deleting the whole user still works because both cascade.
   category Category @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+  /// NoAction: a group with lines cannot be deleted.
+  group    ObligationGroup? @relation(fields: [groupId, userId], references: [id, userId], onDelete: NoAction)
   bills    Bill[]
   rateChanges LoanRateChange[]
   extraPayments LoanExtraPayment[]
@@ -230,7 +235,25 @@ model Obligation {
   /// Lets bills reference (obligation, owner) together, so a bill can never point at another user's obligation.
   @@unique([id, userId])
   @@index([userId])
+  @@index([groupId])
   @@map("obligations")
+}
+
+/// Obligations that belong together, such as "Streaming" (Netflix, Disney). The name is unique per
+/// user; the service also refuses one that differs only in letter case.
+model ObligationGroup {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  obligations Obligation[]
+
+  @@unique([id, userId])
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("obligation_groups")
 }
 
 /// New terms of a loan from one month on: the rate and the monthly payment the bank asks for. The
