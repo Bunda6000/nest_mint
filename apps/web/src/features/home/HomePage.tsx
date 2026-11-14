@@ -8,6 +8,7 @@ import { ChartsSection } from '../charts/ChartsSection';
 import { currentMonth, formatMonth, shiftMonth } from '../spending/months';
 import { type Currency, useCurrency } from './currency';
 import { AttentionPanel } from './AttentionPanel';
+import { BalanceCheckInPanel } from './BalanceCheckInPanel';
 import { amountChangeView, formatAmount, rateChangeView } from './kpi';
 import { KpiCard } from './KpiCard';
 
@@ -124,6 +125,8 @@ export function HomePage() {
       </div>
 
       <AttentionPanel currency={currency} onPaid={() => setAttempt((n) => n + 1)} />
+
+      <BalanceCheckInPanel key={month} month={month} />
 
       {load.status === 'loading' && (
         <p className="mt-6 text-gray-500" role="status">

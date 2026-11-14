@@ -163,6 +163,9 @@ function fakeApi(months: Summary[] = [november(), october()], bills: BillRespons
         }
         return reply(200, { created: 0 });
       }
+      if (/^\/balance-check-ins\?month=/.test(path) && method === 'GET') {
+        return reply(200, { month: path.slice(-7), checkIn: null, needsOpening: true });
+      }
       const inbox = /^\/bills\/inbox\?tab=(overdue|due)$/.exec(path);
       if (inbox && method === 'GET') {
         const tab = inbox[1] as 'overdue' | 'due';

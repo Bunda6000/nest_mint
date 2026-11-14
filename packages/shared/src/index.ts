@@ -6,6 +6,7 @@ export * from './budget.js';
 export * from './categories.js';
 export * from './income.js';
 export * from './insights.js';
+export * from './balance-check-ins.js';
 export * from './obligations.js';
 export * from './summary.js';
 export * from './transactions.js';

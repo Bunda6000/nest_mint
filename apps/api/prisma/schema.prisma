@@ -31,6 +31,7 @@ model User {
   incomes        Income[]
   obligations    Obligation[]
   obligationGroups ObligationGroup[]
+  balanceCheckIns BalanceCheckIn[]
   bills          Bill[]
   loanExtraPayments LoanExtraPayment[]
   loanRateChanges LoanRateChange[]
@@ -333,4 +334,23 @@ model Bill {
   @@unique([transactionId, userId])
   @@index([userId, periodMonth])
   @@map("bills")
+}
+
+/// A monthly check of the books against the real balance of the main salary account. The opening
+/// balance is stored only on the first check-in; later ones start from the previous closing balance.
+model BalanceCheckIn {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  /// The month checked: the first day of that month.
+  month             DateTime @db.Date
+  closingBalanceMkd Int      @map("closing_balance_mkd")
+  openingBalanceMkd Int?     @map("opening_balance_mkd")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month])
+  @@index([userId])
+  @@map("balance_check_ins")
 }
