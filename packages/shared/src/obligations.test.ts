@@ -3,6 +3,7 @@ import { fieldErrors } from './auth/register.js';
 import { END_BEFORE_START } from './income.js';
 import {
   createExtraPaymentSchema,
+  createInstallmentSchema,
   createLoanSchema,
   createRateChangeSchema,
   createObligationSchema,
@@ -389,5 +390,52 @@ describe('payOffLoanSchema', () => {
     expect(payOffLoanSchema.safeParse({ ...ok, amountMkd: 0 }).success).toBe(false);
     expect(payOffLoanSchema.safeParse({ amountMkd: 5 }).success).toBe(false);
     expect(payOffLoanSchema.safeParse({ ...ok, note: 'x' }).success).toBe(false);
+  });
+});
+
+describe('createInstallmentSchema', () => {
+  const kirby = {
+    name: 'Кирби',
+    payee: 'Кирби',
+    categoryId,
+    dueDay: 30,
+    startMonth: '2023-10',
+    contractTotalMkd: 153_750,
+    firstInstallmentMkd: 5_500,
+    regularInstallmentMkd: 3_075,
+  };
+
+  it('accepts a plan with or without a seller', () => {
+    expect(createInstallmentSchema.safeParse(kirby).success).toBe(true);
+    expect(createInstallmentSchema.safeParse({ ...kirby, payee: undefined }).success).toBe(true);
+  });
+
+  it('accepts a first installment that covers the whole total', () => {
+    expect(
+      createInstallmentSchema.safeParse({ ...kirby, firstInstallmentMkd: 153_750 }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ['name', { name: ' ' }],
+    ['contractTotalMkd', { contractTotalMkd: 0 }],
+    ['contractTotalMkd', { contractTotalMkd: 1_000_000_001 }],
+    ['contractTotalMkd', { contractTotalMkd: 100.5 }],
+    ['firstInstallmentMkd', { firstInstallmentMkd: 0 }],
+    ['firstInstallmentMkd', { firstInstallmentMkd: 153_751 }],
+    ['regularInstallmentMkd', { regularInstallmentMkd: 0 }],
+    ['dueDay', { dueDay: 32 }],
+    ['startMonth', { startMonth: '2023-13' }],
+    ['categoryId', { categoryId: 'food' }],
+  ])('refuses a bad %s', (field, over) => {
+    const result = createInstallmentSchema.safeParse({ ...kirby, ...over });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(Object.keys(fieldErrors(result.error))).toContain(field);
+  });
+
+  it('refuses fields it does not know', () => {
+    expect(createInstallmentSchema.safeParse({ ...kirby, endMonth: '2027-11' }).success).toBe(
+      false,
+    );
   });
 });

@@ -13,8 +13,11 @@ export type ObligationRecurrence = (typeof OBLIGATION_RECURRENCES)[number];
 export const MAX_OBLIGATION_NAME_LENGTH = 60;
 export const MAX_PAYEE_LENGTH = 60;
 
-/** A plain recurring bill, or a loan paid back in monthly instalments (see `createLoanSchema`). */
-export const OBLIGATION_KINDS = ['bill', 'loan'] as const;
+/**
+ * A plain recurring bill, a loan paid back in monthly instalments (see `createLoanSchema`), or a
+ * purchase paid in instalments to the seller, with no interest (see `createInstallmentSchema`).
+ */
+export const OBLIGATION_KINDS = ['bill', 'loan', 'installment'] as const;
 export type ObligationKind = (typeof OBLIGATION_KINDS)[number];
 
 /** What a loan was taken for: a home loan (Станбен), a consumer loan (Потрошувачки) or something else. */
@@ -66,6 +69,27 @@ export interface LoanDetails {
   extraPayments: ExtraPaymentResponse[];
 }
 
+/**
+ * What makes an installment plan different from a bill. The regular installment is the obligation's
+ * `expectedAmountMkd`; the seller is its `payee`. One installment a month from the start month, the
+ * last one being whatever is left of the contract total. Progress counts the bills really paid.
+ */
+export interface InstallmentDetails {
+  /** What the whole purchase costs, in whole denars. */
+  contractTotalMkd: number;
+  /** The first, usually larger, installment, in whole denars. */
+  firstInstallmentMkd: number;
+  /** How many installments the plan has in all. */
+  installmentCount: number;
+  /** Installments paid so far and what they came to. */
+  paidCount: number;
+  paidMkd: number;
+  /** The contract total less what was paid. */
+  remainingMkd: number;
+  /** Installments not paid yet. */
+  installmentsLeft: number;
+}
+
 /** An obligation as shown in lists. Amounts are whole denars. Fields of the other recurrences are null. */
 export interface ObligationResponse {
   id: string;
@@ -92,6 +116,8 @@ export interface ObligationResponse {
   kind: ObligationKind;
   /** Only for loans (`kind` is "loan"); `expectedAmountMkd` is then the monthly payment. */
   loan: LoanDetails | null;
+  /** Only for installment plans (`kind` is "installment"). */
+  installment: InstallmentDetails | null;
 }
 
 export interface ObligationsResponse {
@@ -225,6 +251,40 @@ export const createLoanSchema = z
 
 export type CreateLoanInput = z.input<typeof createLoanSchema>;
 export type CreateLoanData = z.output<typeof createLoanSchema>;
+
+export const MAX_CONTRACT_TOTAL_MKD = 1_000_000_000;
+
+/**
+ * An installment plan: a purchase paid to the seller in monthly installments from `startMonth`,
+ * first `firstInstallmentMkd`, then `regularInstallmentMkd` each, and a smaller last one for what is
+ * left of `contractTotalMkd`. The API works out the last month; each installment becomes a bill.
+ */
+export const createInstallmentSchema = z
+  .object({
+    name: nameSchema,
+    payee: payeeSchema,
+    categoryId: categoryIdSchema,
+    dueDay: dueDaySchema,
+    startMonth: monthSchema,
+    contractTotalMkd: z
+      .number({ error: 'Enter the contract total' })
+      .int('Enter whole denars, for example 153750')
+      .min(1, 'Enter an amount above 0')
+      .max(
+        MAX_CONTRACT_TOTAL_MKD,
+        `Amount must be at most ${MAX_CONTRACT_TOTAL_MKD.toLocaleString('en-US')}`,
+      ),
+    firstInstallmentMkd: amountMkdSchema,
+    regularInstallmentMkd: amountMkdSchema,
+  })
+  .strict()
+  .refine((value) => value.firstInstallmentMkd <= value.contractTotalMkd, {
+    message: 'The first installment cannot be more than the contract total',
+    path: ['firstInstallmentMkd'],
+  });
+
+export type CreateInstallmentInput = z.input<typeof createInstallmentSchema>;
+export type CreateInstallmentData = z.output<typeof createInstallmentSchema>;
 
 /**
  * A rate change: from `effectiveMonth` on, the loan has this rate and this monthly payment (typed

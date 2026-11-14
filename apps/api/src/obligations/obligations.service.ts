@@ -1,6 +1,12 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { annuityPaymentMkd, loanTermMonths } from '@nestmint/finance-engine';
 import {
+  annuityPaymentMkd,
+  installmentEndMonth,
+  installmentPlan,
+  loanTermMonths,
+} from '@nestmint/finance-engine';
+import {
+  type CreateInstallmentData,
   type CreateLoanData,
   type CreateObligationData,
   END_BEFORE_START,
@@ -92,6 +98,48 @@ export class ObligationsService {
     });
   }
 
+  /**
+   * An installment plan is a monthly obligation from the start month to the month of its last
+   * installment, which is worked out here. The installments themselves (first, regular, smaller
+   * last) are laid out when each month's bill is created.
+   */
+  async createInstallment(
+    userId: string,
+    input: CreateInstallmentData,
+  ): Promise<ObligationResponse> {
+    await this.assertCategoryUsable(userId, input.categoryId);
+    let endMonth: string;
+    try {
+      endMonth = installmentEndMonth(
+        installmentPlan(
+          input.contractTotalMkd,
+          input.firstInstallmentMkd,
+          input.regularInstallmentMkd,
+        ),
+        input.startMonth,
+      );
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      throw invalid({ regularInstallmentMkd: 'The plan would have too many installments' });
+    }
+    return this.obligations.create(userId, {
+      name: input.name,
+      payee: input.payee ?? null,
+      categoryId: input.categoryId,
+      expectedAmountMkd: input.regularInstallmentMkd,
+      dueDay: input.dueDay,
+      recurrence: 'monthly',
+      everyNMonths: null,
+      months: [],
+      startMonth: input.startMonth,
+      endMonth,
+      installment: {
+        contractTotalMkd: input.contractTotalMkd,
+        firstInstallmentMkd: input.firstInstallmentMkd,
+      },
+    });
+  }
+
   /** By name, so the list reads like the spreadsheet's. */
   async list(userId: string): Promise<ObligationsResponse> {
     const all = await this.obligations.list(userId);
@@ -126,6 +174,18 @@ export class ObligationsService {
     } else {
       if (input.loanType !== undefined) throw invalid({ loanType: 'Only for loans' });
       if (input.principalMkd !== undefined) throw invalid({ principalMkd: 'Only for loans' });
+    }
+    if (existing.installment) {
+      // The amounts and months of the plan fix its installments; to change them, delete or archive
+      // the plan and add a new one.
+      const locked = {
+        expectedAmountMkd: 'The installments of a plan cannot be changed',
+        startMonth: 'The months of a plan cannot be changed',
+        endMonth: 'The months of a plan cannot be changed',
+      } as const;
+      for (const field of Object.keys(locked) as (keyof typeof locked)[]) {
+        if (input[field] !== undefined) throw invalid({ [field]: locked[field] });
+      }
     }
 
     // The end must not come before the start, whichever of the two is being changed.

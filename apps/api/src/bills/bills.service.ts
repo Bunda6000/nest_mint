@@ -245,7 +245,10 @@ function scheduleOf(o: {
 
 /** A loan's bill expects the payment in force in its month, so a rate change reaches only later months. */
 const newBill = (
-  o: Pick<ObligationResponse, 'id' | 'dueDay' | 'expectedAmountMkd' | 'loan'>,
+  o: Pick<
+    ObligationResponse,
+    'id' | 'dueDay' | 'expectedAmountMkd' | 'loan' | 'installment' | 'startMonth'
+  >,
   month: string,
 ): NewBill => ({
   obligationId: o.id,

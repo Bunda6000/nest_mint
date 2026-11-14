@@ -1,15 +1,31 @@
-import { type LoanDefinition, loanTermsInMonth } from '@nestmint/finance-engine';
+import {
+  installmentAmountInMonth,
+  installmentPlan,
+  type LoanDefinition,
+  loanTermsInMonth,
+} from '@nestmint/finance-engine';
 import type { ObligationResponse } from '@nestmint/shared';
 
 /**
- * What an obligation expects to cost in a month. A bill: always its usual amount. A loan: the
+ * What an obligation expects to cost in a month. A bill: always its usual amount. An installment
+ * plan: that month's installment (the first, the regular ones, the smaller last one). A loan: the
  * monthly payment of the terms in force that month, so a rate change reaches only the months from
  * its effective month on.
  */
 export function expectedAmountInMonth(
-  obligation: Pick<ObligationResponse, 'expectedAmountMkd' | 'loan'>,
+  obligation: Pick<ObligationResponse, 'expectedAmountMkd' | 'loan' | 'installment' | 'startMonth'>,
   month: string,
 ): number {
+  if (obligation.installment) {
+    const plan = installmentPlan(
+      obligation.installment.contractTotalMkd,
+      obligation.installment.firstInstallmentMkd,
+      obligation.expectedAmountMkd,
+    );
+    return (
+      installmentAmountInMonth(plan, obligation.startMonth, month) ?? obligation.expectedAmountMkd
+    );
+  }
   if (!obligation.loan) return obligation.expectedAmountMkd;
   return loanTermsInMonth(
     {

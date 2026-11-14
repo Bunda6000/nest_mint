@@ -26,6 +26,8 @@ export interface NewObligation {
   endMonth: string | null;
   /** Set for a loan (the payee is then the lender); null for a plain bill. */
   loan?: Omit<LoanDetails, 'rateChanges' | 'extraPayments'> | null;
+  /** Set for an installment plan (`expectedAmountMkd` is then the regular installment). */
+  installment?: { contractTotalMkd: number; firstInstallmentMkd: number } | null;
 }
 
 /** Only the fields that are present change. A `null` endMonth takes the end away, a `null` payee clears it. */

@@ -396,3 +396,88 @@ describe('update: loans', () => {
     ).toMatchObject({ endMonth: '2030-06' });
   });
 });
+
+describe('createInstallment', () => {
+  const plan = (over: Record<string, unknown> = {}) =>
+    ({
+      name: 'Кирби',
+      payee: 'Кирби',
+      categoryId: categoryId('Electricity'),
+      dueDay: 30,
+      startMonth: '2023-10',
+      contractTotalMkd: 153_750,
+      firstInstallmentMkd: 5_500,
+      regularInstallmentMkd: 3_075,
+      ...over,
+    }) as never;
+
+  it('saves the plan monthly and works out the last month (the Кирби sheet)', async () => {
+    const saved = await service.createInstallment(A, plan());
+    expect(saved).toMatchObject({
+      name: 'Кирби',
+      payee: 'Кирби',
+      kind: 'installment',
+      recurrence: 'monthly',
+      expectedAmountMkd: 3_075,
+      startMonth: '2023-10',
+      endMonth: '2027-11',
+      loan: null,
+      installment: {
+        contractTotalMkd: 153_750,
+        firstInstallmentMkd: 5_500,
+        installmentCount: 50,
+        paidCount: 0,
+        paidMkd: 0,
+        remainingMkd: 153_750,
+        installmentsLeft: 50,
+      },
+    });
+  });
+
+  it('shows what is left from the paid installments (28 paid leave 65,225)', async () => {
+    const saved = await service.createInstallment(A, plan());
+    repository.setPaidAmounts(saved.id, [5_500, ...Array<number>(27).fill(3_075)]);
+    const { obligations } = await service.list(A);
+    expect(obligations[0]!.installment).toMatchObject({
+      paidCount: 28,
+      paidMkd: 88_525,
+      remainingMkd: 65_225,
+      installmentsLeft: 22,
+    });
+  });
+
+  it('saves no seller as null', async () => {
+    const saved = await service.createInstallment(A, plan({ payee: undefined }));
+    expect(saved.payee).toBeNull();
+  });
+
+  it('refuses a plan with too many installments', async () => {
+    const error = await failure(
+      service.createInstallment(
+        A,
+        plan({ contractTotalMkd: 1_000_000, firstInstallmentMkd: 1, regularInstallmentMkd: 1 }),
+      ),
+    );
+    expect(error.getStatus()).toBe(400);
+    expect(detailsOf(error)).toHaveProperty('regularInstallmentMkd');
+  });
+
+  it("refuses an archived category (409) and another user's category (404)", async () => {
+    const other = await failure(
+      service.createInstallment(A, plan({ categoryId: categoryId('Electricity', B) })),
+    );
+    expect(other.getStatus()).toBe(404);
+  });
+
+  it('lets the name, seller, category and due day change, but not the installments or months', async () => {
+    const saved = await service.createInstallment(A, plan());
+    const renamed = await service.update(A, saved.id, { name: 'Кирби усисувач', dueDay: 28 });
+    expect(renamed).toMatchObject({ name: 'Кирби усисувач', dueDay: 28 });
+    for (const field of ['expectedAmountMkd', 'startMonth', 'endMonth']) {
+      const value = field === 'expectedAmountMkd' ? 100 : '2030-01';
+      const error = await failure(service.update(A, saved.id, { [field]: value } as never));
+      expect(error.getStatus()).toBe(400);
+      expect(detailsOf(error)).toHaveProperty(field);
+    }
+  });
+});

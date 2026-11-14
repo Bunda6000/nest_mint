@@ -23,7 +23,16 @@ interface Obl {
   months: number[] | null;
   startMonth: string;
   endMonth: string | null;
-  kind?: 'bill' | 'loan';
+  kind?: 'bill' | 'loan' | 'installment';
+  installment?: {
+    contractTotalMkd: number;
+    firstInstallmentMkd: number;
+    installmentCount: number;
+    paidCount: number;
+    paidMkd: number;
+    remainingMkd: number;
+    installmentsLeft: number;
+  } | null;
   loan?: {
     loanType: string;
     principalMkd: number;
@@ -154,6 +163,34 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       data.push(created);
       return reply(201, created);
     }
+    if (method === 'POST' && path === '/obligations/installments') {
+      const created: Obl = {
+        id: `o${data.length + 10}`,
+        name: String(body?.name),
+        payee: (body?.payee as string | null | undefined) ?? null,
+        categoryId: String(body?.categoryId),
+        categoryName: body?.categoryId === WATER_ID ? 'Water' : 'Electricity',
+        expectedAmountMkd: Number(body?.regularInstallmentMkd),
+        dueDay: Number(body?.dueDay),
+        recurrence: 'monthly',
+        everyNMonths: null,
+        months: null,
+        startMonth: String(body?.startMonth),
+        endMonth: '2027-11',
+        kind: 'installment',
+        installment: {
+          contractTotalMkd: Number(body?.contractTotalMkd),
+          firstInstallmentMkd: Number(body?.firstInstallmentMkd),
+          installmentCount: 50,
+          paidCount: 0,
+          paidMkd: 0,
+          remainingMkd: Number(body?.contractTotalMkd),
+          installmentsLeft: 50,
+        },
+      };
+      data.push(created);
+      return reply(201, created);
+    }
     const archiveMatch = /^\/obligations\/([^/]+)\/archive$/.exec(path);
     if (archiveMatch && method === 'POST') {
       const index = data.findIndex((o) => o.id === archiveMatch[1]);
@@ -243,6 +280,8 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       calls.filter((c) => c.method === 'POST' && /\/(extra-payments|payoff)$/.test(c.path)),
     rateChangePosts: () =>
       calls.filter((c) => c.method === 'POST' && c.path.endsWith('/rate-changes')),
+    installmentPosts: () =>
+      calls.filter((c) => c.method === 'POST' && c.path === '/obligations/installments'),
     loanPosts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations/loans'),
   };
 }
@@ -1042,5 +1081,88 @@ describe('ObligationsPage: extra payment and payoff', () => {
     await user.click(screen.getByRole('button', { name: 'Pay off loan' }));
     expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
     expect(api.extraPosts()).toHaveLength(0);
+  });
+});
+
+describe('ObligationsPage: installment plans', () => {
+  const kirbyRow = (): Obl => ({
+    id: 'k1',
+    name: 'Kirby',
+    payee: 'Kirby',
+    categoryId: WATER_ID,
+    categoryName: 'Water',
+    expectedAmountMkd: 3_075,
+    dueDay: 30,
+    recurrence: 'monthly',
+    everyNMonths: null,
+    months: null,
+    startMonth: '2023-10',
+    endMonth: '2027-11',
+    kind: 'installment',
+    installment: {
+      contractTotalMkd: 153_750,
+      firstInstallmentMkd: 5_500,
+      installmentCount: 50,
+      paidCount: 28,
+      paidMkd: 88_525,
+      remainingMkd: 65_225,
+      installmentsLeft: 22,
+    },
+  });
+
+  it('shows the plan, the amount left and the installments left, without an Edit button', async () => {
+    fakeApi([kirbyRow()]);
+    renderPage();
+    await loaded();
+    expect(
+      screen.getByText('Contract 153,750 MKD · 50 installments, first 5,500 MKD'),
+    ).toBeTruthy();
+    expect(screen.getByText('Paid 28 of 50 · 65,225 MKD left · 22 installments left')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Delete Kirby' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Edit Kirby/ })).toBeNull();
+  });
+
+  it('adds a plan, previews its length and lists it', async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add an installment plan' }));
+    await user.type(screen.getByLabelText('Name'), 'Kirby');
+    await user.click(screen.getByLabelText('Water'));
+    await user.type(screen.getByLabelText(/Contract total/), '153750');
+    await user.type(screen.getByLabelText(/First installment \(MKD\)/), '5500');
+    await user.type(screen.getByLabelText(/Regular installment/), '3075');
+    fireEvent.change(screen.getByLabelText(/First installment month/), {
+      target: { value: '2023-10' },
+    });
+    await user.type(screen.getByLabelText(/Due day/), '30');
+    expect(
+      screen.getByText('50 installments, the last one 650 MKD, until November 2027'),
+    ).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Save installment plan' }));
+
+    await waitFor(() => expect(api.installmentPosts()).toHaveLength(1));
+    expect(api.installmentPosts()[0]!.body).toMatchObject({
+      name: 'Kirby',
+      categoryId: WATER_ID,
+      dueDay: 30,
+      startMonth: '2023-10',
+      contractTotalMkd: 153_750,
+      firstInstallmentMkd: 5_500,
+      regularInstallmentMkd: 3_075,
+    });
+    expect(await screen.findByText(/Contract 153,750 MKD · 50 installments/)).toBeTruthy();
+  });
+
+  it('asks for what is missing and saves nothing', async () => {
+    const api = fakeApi([]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add an installment plan' }));
+    await user.click(screen.getByRole('button', { name: 'Save installment plan' }));
+    expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
+    expect(api.installmentPosts()).toHaveLength(0);
   });
 });

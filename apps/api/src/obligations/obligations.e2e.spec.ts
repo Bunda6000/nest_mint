@@ -500,4 +500,140 @@ describe.skipIf(!process.env.DATABASE_URL)('obligations', () => {
       });
     });
   });
+  describe('installment plans', () => {
+    const plan = async (user: E2eUser, over: Record<string, unknown> = {}) => ({
+      name: 'Vacuum cleaner',
+      payee: 'Kirby',
+      categoryId: await category(user, 'Electricity'),
+      dueDay: 30,
+      startMonth: '2026-01',
+      contractTotalMkd: 10_000,
+      firstInstallmentMkd: 4_000,
+      regularInstallmentMkd: 3_000,
+      ...over,
+    });
+
+    it('refuses the endpoint without a login', async () => {
+      await e2e.http().post('/api/v1/obligations/installments').send({}).expect(401);
+    });
+
+    it('creates a plan, works out the last month and lists it', async () => {
+      const user = await e2e.newUser();
+      const saved = (
+        await e2e.post('/obligations/installments', user, await plan(user)).expect(201)
+      ).body as ObligationResponse;
+      expect(saved).toMatchObject({
+        kind: 'installment',
+        recurrence: 'monthly',
+        expectedAmountMkd: 3_000,
+        startMonth: '2026-01',
+        endMonth: '2026-03',
+        loan: null,
+        installment: {
+          contractTotalMkd: 10_000,
+          firstInstallmentMkd: 4_000,
+          installmentCount: 3,
+          paidCount: 0,
+          remainingMkd: 10_000,
+          installmentsLeft: 3,
+        },
+      });
+      const list = (await e2e.get('/obligations', user).expect(200)).body as ObligationsResponse;
+      expect(list.obligations).toHaveLength(1);
+      expect(list.obligations[0]!.installment?.installmentCount).toBe(3);
+    });
+
+    it('makes each month its own installment: first, regular, then what is left', async () => {
+      const user = await e2e.newUser();
+      const saved = (
+        await e2e.post('/obligations/installments', user, await plan(user)).expect(201)
+      ).body as ObligationResponse;
+      const amounts: [string, number][] = [];
+      for (const month of ['2026-01', '2026-02', '2026-03', '2026-04']) {
+        await e2e.post(`/bills/generate?month=${month}`, user, {}).expect(200);
+        const { bills } = (await e2e.get(`/bills?month=${month}`, user).expect(200)).body as {
+          bills: { obligationId: string; period: string; expectedAmountMkd: number }[];
+        };
+        for (const bill of bills.filter((b) => b.obligationId === saved.id)) {
+          amounts.push([bill.period, bill.expectedAmountMkd]);
+        }
+      }
+      expect(amounts).toEqual([
+        ['2026-01', 4_000],
+        ['2026-02', 3_000],
+        ['2026-03', 3_000],
+      ]);
+    });
+
+    it('counts paid installments to show what is left', async () => {
+      const user = await e2e.newUser();
+      const saved = (
+        await e2e.post('/obligations/installments', user, await plan(user)).expect(201)
+      ).body as ObligationResponse;
+      await e2e.post('/bills/generate?month=2026-01', user, {}).expect(200);
+      const { bills } = (await e2e.get('/bills?month=2026-01', user).expect(200)).body as {
+        bills: { id: string; obligationId: string }[];
+      };
+      const first = bills.find((b) => b.obligationId === saved.id)!;
+      await e2e.post(`/bills/${first.id}/pay`, user, {}).expect(200);
+
+      const list = (await e2e.get('/obligations', user).expect(200)).body as ObligationsResponse;
+      expect(list.obligations[0]!.installment).toMatchObject({
+        paidCount: 1,
+        paidMkd: 4_000,
+        remainingMkd: 6_000,
+        installmentsLeft: 2,
+      });
+    });
+
+    it('answers 400 with the field names for invalid input', async () => {
+      const user = await e2e.newUser();
+      const cases: Array<[Record<string, unknown>, string]> = [
+        [{ name: ' ' }, 'name'],
+        [{ contractTotalMkd: 0 }, 'contractTotalMkd'],
+        [{ firstInstallmentMkd: 10_001 }, 'firstInstallmentMkd'],
+        [{ regularInstallmentMkd: 0 }, 'regularInstallmentMkd'],
+        [{ startMonth: '2026-13' }, 'startMonth'],
+      ];
+      for (const [over, field] of cases) {
+        const response = await e2e
+          .post('/obligations/installments', user, await plan(user, over))
+          .expect(400);
+        expect(Object.keys(errorOf(response.body).details ?? {})).toContain(field);
+      }
+      expect(
+        ((await e2e.get('/obligations', user)).body as ObligationsResponse).obligations,
+      ).toEqual([]);
+    });
+
+    it("refuses another user's category as 404", async () => {
+      const owner = await e2e.newUser();
+      const other = await e2e.newUser();
+      await e2e
+        .post(
+          '/obligations/installments',
+          other,
+          await plan(other, {
+            categoryId: await category(owner, 'Electricity'),
+          }),
+        )
+        .expect(404);
+    });
+
+    it('lets the name change but not the installments or months', async () => {
+      const user = await e2e.newUser();
+      const saved = (
+        await e2e.post('/obligations/installments', user, await plan(user)).expect(201)
+      ).body as ObligationResponse;
+      await e2e.patch(`/obligations/${saved.id}`, user, { name: 'Kirby' }).expect(200);
+      for (const body of [
+        { expectedAmountMkd: 100 },
+        { startMonth: '2026-02' },
+        { endMonth: '2026-06' },
+      ]) {
+        const response = await e2e.patch(`/obligations/${saved.id}`, user, body).expect(400);
+        expect(Object.keys(errorOf(response.body).details ?? {})).toContain(Object.keys(body)[0]);
+      }
+    });
+  });
 });

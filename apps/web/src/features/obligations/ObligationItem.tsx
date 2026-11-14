@@ -10,6 +10,7 @@ import type {
 } from '@nestmint/shared';
 import { useState } from 'react';
 import { formatEurCents, formatMkd, localDay } from '../../format';
+import { describeInstallmentPlan, describeInstallmentProgress } from './installmentText';
 import { LoanForm } from './LoanForm';
 import { ExtraPaymentForm } from './ExtraPaymentForm';
 import {
@@ -183,6 +184,16 @@ export function ObligationItem({
               {describeExtraPayment(payment)}
             </p>
           ))}
+          {obligation.installment && (
+            <>
+              <p className="text-xs text-gray-500">
+                {describeInstallmentPlan(obligation.installment)}
+              </p>
+              <p className="text-xs text-gray-500">
+                {describeInstallmentProgress(obligation.installment)}
+              </p>
+            </>
+          )}
           {stillOwed !== null && (
             <p className="text-xs text-gray-500">
               Still owed about {formatMkd(stillOwed)} after this month (estimate)
@@ -234,15 +245,17 @@ export function ObligationItem({
             Rate change
           </button>
         )}
-        <button
-          type="button"
-          disabled={locked}
-          aria-label={`Edit ${label}`}
-          onClick={() => start('edit')}
-          className={small}
-        >
-          Edit
-        </button>
+        {!obligation.installment && (
+          <button
+            type="button"
+            disabled={locked}
+            aria-label={`Edit ${label}`}
+            onClick={() => start('edit')}
+            className={small}
+          >
+            Edit
+          </button>
+        )}
         <button
           type="button"
           disabled={locked}

@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import {
+  type CreateInstallmentData,
+  createInstallmentSchema,
   type CreateLoanData,
   createLoanSchema,
   type CreateObligationData,
@@ -38,6 +40,15 @@ export class ObligationsController {
     @Body(new ZodValidationPipe<CreateLoanData>(createLoanSchema)) body: CreateLoanData,
   ): Promise<ObligationResponse> {
     return this.obligations.createLoan(user.id, body);
+  }
+
+  @Post('installments')
+  createInstallment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe<CreateInstallmentData>(createInstallmentSchema))
+    body: CreateInstallmentData,
+  ): Promise<ObligationResponse> {
+    return this.obligations.createInstallment(user.id, body);
   }
 
   @Patch(':id')

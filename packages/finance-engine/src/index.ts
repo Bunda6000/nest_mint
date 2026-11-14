@@ -2,6 +2,7 @@ export * from './bill-status.js';
 export * from './budget-grid.js';
 export * from './exchange-rate.js';
 export * from './insights.js';
+export * from './installments.js';
 export * from './loans.js';
 export * from './money.js';
 export * from './month-delta.js';

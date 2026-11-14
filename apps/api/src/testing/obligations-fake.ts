@@ -1,11 +1,18 @@
 import type { ExtraPaymentKind, ObligationResponse, RateChangeResponse } from '@nestmint/shared';
+import { installmentDetailsOf } from '../obligations/installment-details.js';
 import type {
   NewObligation,
   ObligationChange,
   ObligationsRepository,
 } from '../obligations/obligations.repository.js';
 
-type Row = ObligationResponse & { userId: string; archived: boolean };
+type Row = Omit<ObligationResponse, 'installment'> & {
+  userId: string;
+  archived: boolean;
+  plan: { contractTotalMkd: number; firstInstallmentMkd: number } | null;
+  /** What each paid installment cost; a test sets it with `setPaidAmounts`. */
+  paidAmounts: number[];
+};
 
 /** Keeps each user's obligations apart and lists newest entered first, like the real repository. */
 export class InMemoryObligations implements ObligationsRepository {
@@ -34,12 +41,20 @@ export class InMemoryObligations implements ObligationsRepository {
       startMonth: input.startMonth,
       endMonth: input.endMonth,
       createdMonth: this.createdMonth(),
-      kind: input.loan ? 'loan' : 'bill',
+      kind: input.loan ? 'loan' : input.installment ? 'installment' : 'bill',
       loan: input.loan ? { ...input.loan, rateChanges: [], extraPayments: [] } : null,
+      plan: input.installment ? { ...input.installment } : null,
+      paidAmounts: [],
       archived: false,
     };
     this.rows.push(row);
     return InMemoryObligations.response(row);
+  }
+
+  /** Stands in for the paid bills of an installment plan. */
+  setPaidAmounts(id: string, amounts: number[]): void {
+    const row = this.rows.find((r) => r.id === id);
+    if (row) row.paidAmounts = [...amounts];
   }
 
   async list(userId: string): Promise<ObligationResponse[]> {
@@ -136,6 +151,14 @@ export class InMemoryObligations implements ObligationsRepository {
       endMonth: row.endMonth,
       createdMonth: row.createdMonth,
       kind: row.kind,
+      installment: row.plan
+        ? installmentDetailsOf(
+            row.plan.contractTotalMkd,
+            row.plan.firstInstallmentMkd,
+            row.expectedAmountMkd,
+            row.paidAmounts,
+          )
+        : null,
       loan: row.loan
         ? {
             ...row.loan,

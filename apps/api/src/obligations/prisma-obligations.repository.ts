@@ -8,6 +8,7 @@ import type {
   RateChangeResponse,
 } from '@nestmint/shared';
 import { randomUUID } from 'node:crypto';
+import { installmentDetailsOf } from './installment-details.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
   NewObligation,
@@ -31,6 +32,8 @@ const select = {
   loanType: true,
   principalMkd: true,
   annualRateBp: true,
+  contractTotalMkd: true,
+  firstInstallmentMkd: true,
   createdAt: true,
   category: { select: { name: true } },
   rateChanges: {
@@ -59,6 +62,8 @@ interface Row {
   loanType: LoanType | null;
   principalMkd: number | null;
   annualRateBp: number | null;
+  contractTotalMkd: number | null;
+  firstInstallmentMkd: number | null;
   createdAt: Date;
   category: { name: string };
   rateChanges: { effectiveMonth: Date; annualRateBp: number; monthlyPaymentMkd: number }[];
@@ -70,7 +75,8 @@ const month = (date: Date | null) => (date ? date.toISOString().slice(0, 7) : nu
 /** "2026-11" → 1 November 2026, midnight UTC. */
 const toMonthStart = (value: string) => new Date(`${value}-01T00:00:00.000Z`);
 
-const toResponse = (row: Row): ObligationResponse => ({
+/** `paidAmounts` is only used by installment plans: the expense amount of each paid bill. */
+const toResponse = (row: Row, paidAmounts: readonly number[] = []): ObligationResponse => ({
   id: row.id,
   name: row.name,
   payee: row.payee,
@@ -107,6 +113,15 @@ const toResponse = (row: Row): ObligationResponse => ({
           })),
         }
       : null,
+  installment:
+    row.kind === 'installment' && row.contractTotalMkd !== null && row.firstInstallmentMkd !== null
+      ? installmentDetailsOf(
+          row.contractTotalMkd,
+          row.firstInstallmentMkd,
+          row.expectedAmountMkd,
+          paidAmounts,
+        )
+      : null,
 });
 
 @Injectable()
@@ -136,6 +151,13 @@ export class PrismaObligationsRepository implements ObligationsRepository {
               annualRateBp: input.loan.annualRateBp,
             }
           : {}),
+        ...(input.installment
+          ? {
+              kind: 'installment' as const,
+              contractTotalMkd: input.installment.contractTotalMkd,
+              firstInstallmentMkd: input.installment.firstInstallmentMkd,
+            }
+          : {}),
       },
       select,
     });
@@ -148,7 +170,8 @@ export class PrismaObligationsRepository implements ObligationsRepository {
       orderBy: { createdAt: 'desc' },
       select,
     });
-    return rows.map(toResponse);
+    const paid = await this.paidAmounts(userId, rows);
+    return rows.map((row) => toResponse(row, paid.get(row.id)));
   }
 
   async find(userId: string, id: string): Promise<ObligationResponse | null> {
@@ -156,7 +179,27 @@ export class PrismaObligationsRepository implements ObligationsRepository {
       where: { id, userId, archivedAt: null },
       select,
     });
-    return row ? toResponse(row) : null;
+    if (!row) return null;
+    const paid = await this.paidAmounts(userId, [row]);
+    return toResponse(row, paid.get(row.id));
+  }
+
+  /** What each paid bill of the installment plans among `rows` really cost, by obligation. */
+  private async paidAmounts(userId: string, rows: Row[]): Promise<Map<string, number[]>> {
+    const ids = rows.filter((r) => r.kind === 'installment').map((r) => r.id);
+    const byObligation = new Map<string, number[]>();
+    if (ids.length === 0) return byObligation;
+    const bills = await this.prisma.bill.findMany({
+      where: { userId, obligationId: { in: ids }, transactionId: { not: null } },
+      select: { obligationId: true, transaction: { select: { amountMkd: true } } },
+    });
+    for (const bill of bills) {
+      if (!bill.transaction) continue;
+      const list = byObligation.get(bill.obligationId) ?? [];
+      list.push(bill.transaction.amountMkd);
+      byObligation.set(bill.obligationId, list);
+    }
+    return byObligation;
   }
 
   async update(

@@ -1,6 +1,7 @@
 import type {
   CategoriesResponse,
   CreateExtraPaymentData,
+  CreateInstallmentData,
   CreateLoanData,
   CreateObligationData,
   CreateRateChangeData,
@@ -10,6 +11,7 @@ import type {
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { InstallmentForm } from './InstallmentForm';
 import { LoanForm } from './LoanForm';
 import { ObligationForm } from './ObligationForm';
 import { ObligationItem } from './ObligationItem';
@@ -43,7 +45,7 @@ export function ObligationsPage() {
   const { authedGet, authedSend } = useAuth();
   const [page, setPage] = useState<Load<PageData>>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
-  const [adding, setAdding] = useState<'bill' | 'loan' | null>(null);
+  const [adding, setAdding] = useState<'bill' | 'loan' | 'installment' | null>(null);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
@@ -72,6 +74,12 @@ export function ObligationsPage() {
 
   async function addLoan(values: CreateLoanData) {
     await authedSend('POST', '/obligations/loans', values);
+    setAdding(null);
+    reload();
+  }
+
+  async function addInstallment(values: CreateInstallmentData) {
+    await authedSend('POST', '/obligations/installments', values);
     setAdding(null);
     reload();
   }
@@ -131,7 +139,8 @@ export function ObligationsPage() {
       </Link>
       <h1 className="mt-3 text-2xl font-semibold">Recurring bills</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Add a bill or a loan once; each month's payment appears on the Bills screen by itself.
+        Add a bill, a loan or an installment plan once; each month's payment appears on the Bills
+        screen by itself.
       </p>
 
       {page.status === 'loading' && (
@@ -175,6 +184,16 @@ export function ObligationsPage() {
               <LoanForm groups={groups} onSave={addLoan} onCancel={() => setAdding(null)} />
             </div>
           )}
+          {adding === 'installment' && (
+            <div className="mt-6 rounded-lg border p-4">
+              <p className="mb-3 font-medium">Add an installment plan</p>
+              <InstallmentForm
+                groups={groups}
+                onSave={addInstallment}
+                onCancel={() => setAdding(null)}
+              />
+            </div>
+          )}
           {adding === null && (
             <div className="mt-6 flex flex-col gap-3">
               <button
@@ -192,6 +211,14 @@ export function ObligationsPage() {
                 className="w-full rounded-lg border border-emerald-700 px-4 py-3 font-medium text-emerald-700 disabled:opacity-50"
               >
                 Add a loan
+              </button>
+              <button
+                type="button"
+                disabled={editing}
+                onClick={() => setAdding('installment')}
+                className="w-full rounded-lg border border-emerald-700 px-4 py-3 font-medium text-emerald-700 disabled:opacity-50"
+              >
+                Add an installment plan
               </button>
             </div>
           )}
