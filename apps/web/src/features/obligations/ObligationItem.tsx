@@ -1,15 +1,26 @@
 import { convertMkdToEur } from '@nestmint/finance-engine';
 import type {
   CategoryGroupResponse,
+  CreateExtraPaymentData,
   CreateLoanData,
   CreateObligationData,
   CreateRateChangeData,
+  PayOffLoanData,
   ObligationResponse,
 } from '@nestmint/shared';
 import { useState } from 'react';
 import { formatEurCents, formatMkd, localDay } from '../../format';
 import { LoanForm } from './LoanForm';
-import { currentLoanTerms, describeLoan, describeRateChange } from './loanText';
+import { ExtraPaymentForm } from './ExtraPaymentForm';
+import {
+  currentLoanTerms,
+  describeExtraPayment,
+  describeLoan,
+  describeRateChange,
+  estimateStillOwed,
+  payoffDay,
+} from './loanText';
+import { PayOffForm } from './PayOffForm';
 import { ObligationForm } from './ObligationForm';
 import { describeObligation } from './obligationText';
 import { RateChangeForm } from './RateChangeForm';
@@ -23,6 +34,8 @@ interface ObligationItemProps {
   onEdit: (values: CreateObligationData) => Promise<void>;
   onEditLoan: (values: CreateLoanData) => Promise<void>;
   onRateChange: (values: CreateRateChangeData) => Promise<void>;
+  onExtraPayment: (values: CreateExtraPaymentData) => Promise<void>;
+  onPayOff: (values: PayOffLoanData) => Promise<void>;
   onDelete: () => Promise<void>;
   onArchive: () => Promise<void>;
   /** Called when this row starts or stops being edited. */
@@ -40,11 +53,15 @@ export function ObligationItem({
   onEdit,
   onEditLoan,
   onRateChange,
+  onExtraPayment,
+  onPayOff,
   onDelete,
   onArchive,
   onEditing,
 }: ObligationItemProps) {
-  const [mode, setMode] = useState<'view' | 'edit' | 'rate' | 'remove'>('view');
+  const [mode, setMode] = useState<'view' | 'edit' | 'rate' | 'extra' | 'payoff' | 'remove'>(
+    'view',
+  );
   const editing = mode === 'edit';
   const isLoan = obligation.kind === 'loan' && obligation.loan !== null;
 
@@ -52,10 +69,42 @@ export function ObligationItem({
     setMode('view');
     onEditing(false);
   };
-  const start = (next: 'edit' | 'rate' | 'remove') => {
+  const start = (next: 'edit' | 'rate' | 'extra' | 'payoff' | 'remove') => {
     setMode(next);
     onEditing(true);
   };
+
+  if (mode === 'extra' && isLoan) {
+    return (
+      <li className="p-3">
+        <p className="mb-3 font-medium">Extra payment on {obligation.name}</p>
+        <ExtraPaymentForm
+          loan={obligation}
+          onSave={async (values) => {
+            await onExtraPayment(values);
+            stop();
+          }}
+          onCancel={stop}
+        />
+      </li>
+    );
+  }
+
+  if (mode === 'payoff' && isLoan) {
+    return (
+      <li className="p-3">
+        <p className="mb-3 font-medium">Pay off {obligation.name}</p>
+        <PayOffForm
+          loan={obligation}
+          onSave={async (values) => {
+            await onPayOff(values);
+            stop();
+          }}
+          onCancel={stop}
+        />
+      </li>
+    );
+  }
 
   if (editing && isLoan) {
     return (
@@ -114,6 +163,8 @@ export function ObligationItem({
     ? currentLoanTerms(obligation, today.slice(0, 7)).monthlyPaymentMkd
     : obligation.expectedAmountMkd;
   const euro = convertMkdToEur(payment, today).eurCents;
+  const stillOwed = isLoan ? estimateStillOwed(obligation, today.slice(0, 7)) : null;
+  const paidOff = obligation.loan ? payoffDay(obligation.loan) !== null : false;
   const label = `${obligation.name}, ${formatMkd(payment)}`;
 
   return (
@@ -126,6 +177,16 @@ export function ObligationItem({
           </p>
           {obligation.kind === 'loan' && obligation.loan && (
             <p className="text-xs text-gray-500">{describeLoan(obligation.loan)}</p>
+          )}
+          {obligation.loan?.extraPayments.map((payment) => (
+            <p key={payment.id} className="text-xs text-gray-500">
+              {describeExtraPayment(payment)}
+            </p>
+          ))}
+          {stillOwed !== null && (
+            <p className="text-xs text-gray-500">
+              Still owed about {formatMkd(stillOwed)} after this month (estimate)
+            </p>
           )}
           {obligation.loan?.rateChanges.map((change) => (
             <p key={change.effectiveMonth} className="text-xs text-gray-500">
@@ -140,7 +201,29 @@ export function ObligationItem({
         </div>
       </div>
       <div className="mt-2 flex justify-end gap-2">
-        {isLoan && (
+        {isLoan && !paidOff && (
+          <button
+            type="button"
+            disabled={locked}
+            aria-label={`Extra payment on ${obligation.name}`}
+            onClick={() => start('extra')}
+            className={small}
+          >
+            Extra payment
+          </button>
+        )}
+        {isLoan && !paidOff && (
+          <button
+            type="button"
+            disabled={locked}
+            aria-label={`Pay off ${obligation.name}`}
+            onClick={() => start('payoff')}
+            className={small}
+          >
+            Pay off
+          </button>
+        )}
+        {isLoan && !paidOff && (
           <button
             type="button"
             disabled={locked}

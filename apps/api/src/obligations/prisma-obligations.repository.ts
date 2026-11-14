@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  ExtraPaymentKind,
   LoanType,
   ObligationKind,
   ObligationRecurrence,
@@ -36,6 +37,10 @@ const select = {
     select: { effectiveMonth: true, annualRateBp: true, monthlyPaymentMkd: true },
     orderBy: { effectiveMonth: 'asc' },
   },
+  extraPayments: {
+    select: { id: true, paidOn: true, amountMkd: true, kind: true },
+    orderBy: { paidOn: 'asc' },
+  },
 } as const;
 
 interface Row {
@@ -57,6 +62,7 @@ interface Row {
   createdAt: Date;
   category: { name: string };
   rateChanges: { effectiveMonth: Date; annualRateBp: number; monthlyPaymentMkd: number }[];
+  extraPayments: { id: string; paidOn: Date; amountMkd: number; kind: ExtraPaymentKind }[];
 }
 
 // A DATE column comes back as midnight UTC, so the first 7 characters are the month.
@@ -92,6 +98,12 @@ const toResponse = (row: Row): ObligationResponse => ({
             effectiveMonth: month(c.effectiveMonth)!,
             annualRateBp: c.annualRateBp,
             monthlyPaymentMkd: c.monthlyPaymentMkd,
+          })),
+          extraPayments: row.extraPayments.map((e) => ({
+            id: e.id,
+            paidOn: e.paidOn.toISOString().slice(0, 10),
+            amountMkd: e.amountMkd,
+            kind: e.kind,
           })),
         }
       : null,
@@ -199,6 +211,29 @@ export class PrismaObligationsRepository implements ObligationsRepository {
       update: {
         annualRateBp: change.annualRateBp,
         monthlyPaymentMkd: change.monthlyPaymentMkd,
+      },
+    });
+    return this.find(userId, id);
+  }
+
+  async addExtraPayment(
+    userId: string,
+    id: string,
+    payment: { paidOn: string; amountMkd: number; kind: ExtraPaymentKind },
+  ): Promise<ObligationResponse | null> {
+    const owned = await this.prisma.obligation.findFirst({
+      where: { id, userId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!owned) return null;
+    await this.prisma.loanExtraPayment.create({
+      data: {
+        id: randomUUID(),
+        userId,
+        obligationId: id,
+        paidOn: new Date(`${payment.paidOn}T00:00:00.000Z`),
+        amountMkd: payment.amountMkd,
+        kind: payment.kind,
       },
     });
     return this.find(userId, id);

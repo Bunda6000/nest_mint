@@ -87,6 +87,9 @@ export interface BillsRepository {
   /** Deletes the obligation's UNPAID bills (all months) and returns how many. Paid bills stay. */
   deleteUnpaidForObligation(userId: string, obligationId: string): Promise<number>;
 
+  /** Deletes the obligation's UNPAID bills from a month on ("YYYY-MM", included); returns how many. */
+  deleteUnpaidFromMonth(userId: string, obligationId: string, fromMonth: string): Promise<number>;
+
   /** Every unpaid bill, soonest due first (then by name). */
   listUnpaid(userId: string): Promise<BillRecord[]>;
 

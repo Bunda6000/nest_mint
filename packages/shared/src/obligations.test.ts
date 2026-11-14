@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { fieldErrors } from './auth/register.js';
 import { END_BEFORE_START } from './income.js';
 import {
+  createExtraPaymentSchema,
   createLoanSchema,
   createRateChangeSchema,
   createObligationSchema,
   MAX_OBLIGATION_NAME_LENGTH,
   MAX_PAYEE_LENGTH,
+  payOffLoanSchema,
   updateObligationSchema,
 } from './obligations.js';
 import { MAX_EXPENSE_MKD } from './transactions.js';
@@ -347,5 +349,45 @@ describe('updateObligationSchema: loan fields', () => {
     expect(updateObligationSchema.safeParse({ principalMkd: 900_000 }).success).toBe(true);
     expect(updateObligationSchema.safeParse({ loanType: 'car' }).success).toBe(false);
     expect(updateObligationSchema.safeParse({ principalMkd: 0 }).success).toBe(false);
+  });
+});
+
+describe('createExtraPaymentSchema', () => {
+  const base = { paidOn: '2026-05-10', amountMkd: 20_000, effect: 'shorten' };
+
+  it('accepts each effect, with the new payment only for a lower payment', () => {
+    expect(createExtraPaymentSchema.safeParse(base).success).toBe(true);
+    expect(createExtraPaymentSchema.safeParse({ ...base, effect: 'none' }).success).toBe(true);
+    expect(
+      createExtraPaymentSchema.safeParse({
+        ...base,
+        effect: 'lower_payment',
+        newMonthlyPaymentMkd: 6_000,
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ['newMonthlyPaymentMkd', { effect: 'lower_payment' }],
+    ['newMonthlyPaymentMkd', { newMonthlyPaymentMkd: 6_000 }],
+    ['effect', { effect: 'faster' }],
+    ['paidOn', { paidOn: '2026-02-30' }],
+    ['paidOn', { paidOn: '10.05.2026' }],
+    ['amountMkd', { amountMkd: 0 }],
+    ['amountMkd', { amountMkd: 10.5 }],
+  ])('refuses a bad %s', (field, over) => {
+    const result = createExtraPaymentSchema.safeParse({ ...base, ...over });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(Object.keys(fieldErrors(result.error))).toContain(field);
+  });
+});
+
+describe('payOffLoanSchema', () => {
+  it('needs a day and an amount and refuses extra fields', () => {
+    const ok = { paidOn: '2026-11-05', amountMkd: 20_000 };
+    expect(payOffLoanSchema.safeParse(ok).success).toBe(true);
+    expect(payOffLoanSchema.safeParse({ ...ok, amountMkd: 0 }).success).toBe(false);
+    expect(payOffLoanSchema.safeParse({ amountMkd: 5 }).success).toBe(false);
+    expect(payOffLoanSchema.safeParse({ ...ok, note: 'x' }).success).toBe(false);
   });
 });

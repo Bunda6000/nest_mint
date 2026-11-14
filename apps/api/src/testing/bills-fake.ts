@@ -118,6 +118,25 @@ export class InMemoryBills implements BillsRepository {
     return row ? this.record(row) : null;
   }
 
+  async deleteUnpaidFromMonth(
+    userId: string,
+    obligationId: string,
+    fromMonth: string,
+  ): Promise<number> {
+    const keep = this.rows.filter(
+      (r) =>
+        !(
+          r.userId === userId &&
+          r.obligationId === obligationId &&
+          r.transactionId === null &&
+          r.period >= fromMonth
+        ),
+    );
+    const removed = this.rows.length - keep.length;
+    this.rows.splice(0, this.rows.length, ...keep);
+    return removed;
+  }
+
   async countPaidForObligation(userId: string, obligationId: string): Promise<number> {
     return this.rows.filter(
       (r) => r.userId === userId && r.obligationId === obligationId && r.transactionId !== null,

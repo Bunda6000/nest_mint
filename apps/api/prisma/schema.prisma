@@ -31,6 +31,7 @@ model User {
   incomes        Income[]
   obligations    Obligation[]
   bills          Bill[]
+  loanExtraPayments LoanExtraPayment[]
   loanRateChanges LoanRateChange[]
 
   @@map("users")
@@ -219,6 +220,7 @@ model Obligation {
   category Category @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
   bills    Bill[]
   rateChanges LoanRateChange[]
+  extraPayments LoanExtraPayment[]
 
   /// Lets bills reference (obligation, owner) together, so a bill can never point at another user's obligation.
   @@unique([id, userId])
@@ -246,6 +248,32 @@ model LoanRateChange {
   @@unique([obligationId, effectiveMonth])
   @@index([userId])
   @@map("loan_rate_changes")
+}
+
+/// Money paid towards a loan on top of its regular payments, or the final payoff. The matching
+/// expense is a separate transaction, so deleting that expense does not change the loan.
+model LoanExtraPayment {
+  id           String           @id @default(uuid()) @db.Uuid
+  userId       String           @map("user_id") @db.Uuid
+  obligationId String           @map("obligation_id") @db.Uuid
+  paidOn       DateTime         @map("paid_on") @db.Date
+  amountMkd    Int              @map("amount_mkd")
+  kind         ExtraPaymentKind
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  obligation Obligation @relation(fields: [obligationId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@index([obligationId])
+  @@index([userId])
+  @@map("loan_extra_payments")
+}
+
+enum ExtraPaymentKind {
+  extra
+  payoff
+
+  @@map("extra_payment_kind")
 }
 
 /// One bill: an obligation's expected amount due in one month. Created from the obligation, at most

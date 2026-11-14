@@ -1,4 +1,4 @@
-import type { ObligationResponse, RateChangeResponse } from '@nestmint/shared';
+import type { ExtraPaymentKind, ObligationResponse, RateChangeResponse } from '@nestmint/shared';
 import type {
   NewObligation,
   ObligationChange,
@@ -35,7 +35,7 @@ export class InMemoryObligations implements ObligationsRepository {
       endMonth: input.endMonth,
       createdMonth: this.createdMonth(),
       kind: input.loan ? 'loan' : 'bill',
-      loan: input.loan ? { ...input.loan, rateChanges: [] } : null,
+      loan: input.loan ? { ...input.loan, rateChanges: [], extraPayments: [] } : null,
       archived: false,
     };
     this.rows.push(row);
@@ -92,6 +92,20 @@ export class InMemoryObligations implements ObligationsRepository {
     return InMemoryObligations.response(row);
   }
 
+  async addExtraPayment(
+    userId: string,
+    id: string,
+    payment: { paidOn: string; amountMkd: number; kind: ExtraPaymentKind },
+  ): Promise<ObligationResponse | null> {
+    const row = this.rows.find((r) => r.id === id && r.userId === userId && !r.archived);
+    if (!row || !row.loan) return null;
+    row.loan.extraPayments = [
+      ...row.loan.extraPayments,
+      { id: `extra-${++this.counter}`, ...payment },
+    ].sort((a, b) => a.paidOn.localeCompare(b.paidOn));
+    return InMemoryObligations.response(row);
+  }
+
   async remove(userId: string, id: string): Promise<boolean> {
     const index = this.rows.findIndex((r) => r.id === id && r.userId === userId);
     if (index < 0) return false;
@@ -123,7 +137,11 @@ export class InMemoryObligations implements ObligationsRepository {
       createdMonth: row.createdMonth,
       kind: row.kind,
       loan: row.loan
-        ? { ...row.loan, rateChanges: row.loan.rateChanges.map((c) => ({ ...c })) }
+        ? {
+            ...row.loan,
+            rateChanges: row.loan.rateChanges.map((c) => ({ ...c })),
+            extraPayments: row.loan.extraPayments.map((e) => ({ ...e })),
+          }
         : null,
     };
   }

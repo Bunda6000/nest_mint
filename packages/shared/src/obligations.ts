@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { END_BEFORE_START } from './income.js';
-import { amountMkdSchema, monthSchema } from './transactions.js';
+import { amountMkdSchema, isoDateSchema, monthSchema } from './transactions.js';
 
 /**
  * A recurring bill (an "obligation") is stored once with its schedule; the bills of each month are
@@ -36,6 +36,19 @@ export interface RateChangeResponse {
   monthlyPaymentMkd: number;
 }
 
+/** What an extra payment does to the schedule. A payoff always closes the loan. */
+export const EXTRA_PAYMENT_KINDS = ['extra', 'payoff'] as const;
+export type ExtraPaymentKind = (typeof EXTRA_PAYMENT_KINDS)[number];
+
+/** Money paid on top of the regular payments, or the final payment that closes the loan. */
+export interface ExtraPaymentResponse {
+  id: string;
+  /** The day it was paid, "YYYY-MM-DD". */
+  paidOn: string;
+  amountMkd: number;
+  kind: ExtraPaymentKind;
+}
+
 /** What makes a loan different from a bill. The lender is the obligation's `payee`. */
 export interface LoanDetails {
   loanType: LoanType;
@@ -49,6 +62,8 @@ export interface LoanDetails {
    * has started by then.
    */
   rateChanges: RateChangeResponse[];
+  /** Extra payments and a payoff, oldest first. */
+  extraPayments: ExtraPaymentResponse[];
 }
 
 /** An obligation as shown in lists. Amounts are whole denars. Fields of the other recurrences are null. */
@@ -226,6 +241,54 @@ export const createRateChangeSchema = z
 
 export type CreateRateChangeInput = z.input<typeof createRateChangeSchema>;
 export type CreateRateChangeData = z.output<typeof createRateChangeSchema>;
+
+export const EXTRA_PAYMENT_EFFECTS = ['shorten', 'lower_payment', 'none'] as const;
+export type ExtraPaymentEffect = (typeof EXTRA_PAYMENT_EFFECTS)[number];
+
+/**
+ * Extra money paid towards a loan on `paidOn`. It is also saved as an expense. `effect` says what
+ * happens to the loan: `shorten` keeps the payment and ends the loan earlier, `lower_payment` keeps
+ * the end date and needs the new monthly payment from the bank (`newMonthlyPaymentMkd`, from the
+ * month after `paidOn`), `none` leaves the schedule alone.
+ */
+export const createExtraPaymentSchema = z
+  .object({
+    paidOn: isoDateSchema,
+    amountMkd: amountMkdSchema,
+    effect: z.enum(EXTRA_PAYMENT_EFFECTS, { error: 'Choose what the extra payment does' }),
+    newMonthlyPaymentMkd: amountMkdSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.effect === 'lower_payment' && value.newMonthlyPaymentMkd === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['newMonthlyPaymentMkd'],
+        message: 'Enter the new monthly payment',
+      });
+    }
+    if (value.effect !== 'lower_payment' && value.newMonthlyPaymentMkd !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['newMonthlyPaymentMkd'],
+        message: 'Only for a lower payment',
+      });
+    }
+  });
+
+export type CreateExtraPaymentInput = z.input<typeof createExtraPaymentSchema>;
+export type CreateExtraPaymentData = z.output<typeof createExtraPaymentSchema>;
+
+/**
+ * Pays the loan off early: the amount from the bank, on a day. It is saved as an expense, the loan
+ * ends in that month and its unpaid bills from that month on are removed.
+ */
+export const payOffLoanSchema = z
+  .object({ paidOn: isoDateSchema, amountMkd: amountMkdSchema })
+  .strict();
+
+export type PayOffLoanInput = z.input<typeof payOffLoanSchema>;
+export type PayOffLoanData = z.output<typeof payOffLoanSchema>;
 
 /**
  * Change any of the fields. The recurrence cannot be changed (add a new obligation), and which

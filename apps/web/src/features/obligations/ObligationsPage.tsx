@@ -1,8 +1,10 @@
 import type {
   CategoriesResponse,
+  CreateExtraPaymentData,
   CreateLoanData,
   CreateObligationData,
   CreateRateChangeData,
+  PayOffLoanData,
   ObligationsResponse,
 } from '@nestmint/shared';
 import { useEffect, useState } from 'react';
@@ -91,6 +93,16 @@ export function ObligationsPage() {
 
   async function changeRate(id: string, values: CreateRateChangeData) {
     await authedSend('POST', `/obligations/${id}/rate-changes`, values);
+    reload();
+  }
+
+  async function addExtraPayment(id: string, values: CreateExtraPaymentData) {
+    await authedSend('POST', `/obligations/${id}/extra-payments`, values);
+    reload();
+  }
+
+  async function payOff(id: string, values: PayOffLoanData) {
+    await authedSend('POST', `/obligations/${id}/payoff`, values);
     reload();
   }
 
@@ -201,6 +213,8 @@ export function ObligationsPage() {
                   onEdit={(values) => edit(obligation.id, values)}
                   onEditLoan={(values) => editLoan(obligation.id, values)}
                   onRateChange={(values) => changeRate(obligation.id, values)}
+                  onExtraPayment={(values) => addExtraPayment(obligation.id, values)}
+                  onPayOff={(values) => payOff(obligation.id, values)}
                   onDelete={() => remove(obligation.id)}
                   onArchive={() => archive(obligation.id)}
                 />

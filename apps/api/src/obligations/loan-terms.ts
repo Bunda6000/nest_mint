@@ -1,4 +1,4 @@
-import { loanTermsInMonth } from '@nestmint/finance-engine';
+import { type LoanDefinition, loanTermsInMonth } from '@nestmint/finance-engine';
 import type { ObligationResponse } from '@nestmint/shared';
 
 /**
@@ -19,4 +19,23 @@ export function expectedAmountInMonth(
     obligation.loan.rateChanges,
     month,
   ).monthlyPaymentMkd;
+}
+
+/** The loan as the finance engine wants it. `null` for a plain bill or a loan without a last month. */
+export function loanDefinitionOf(
+  obligation: Pick<ObligationResponse, 'expectedAmountMkd' | 'loan' | 'startMonth' | 'endMonth'>,
+): LoanDefinition | null {
+  const { loan, endMonth } = obligation;
+  if (!loan || !endMonth) return null;
+  return {
+    principalMkd: loan.principalMkd,
+    startMonth: obligation.startMonth,
+    endMonth,
+    initial: { annualRateBp: loan.annualRateBp, monthlyPaymentMkd: obligation.expectedAmountMkd },
+    changes: loan.rateChanges,
+    extras: loan.extraPayments.map((e) => ({
+      month: e.paidOn.slice(0, 7),
+      amountMkd: e.amountMkd,
+    })),
+  };
 }

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   annuityPaymentMkd,
   balanceAtStartOfMonth,
+  loanPayoffMonth,
   loanSchedule,
   loanTermMonths,
   loanTermsInMonth,
+  monthAfter,
   suggestedPaymentMkd,
   type LoanDefinition,
   type RateChange,
@@ -109,6 +111,7 @@ describe('loanSchedule', () => {
       openingMkd: 1_000_000,
       interestMkd: 5_000,
       paymentMkd: 11_102,
+      extraMkd: 0,
       closingMkd: 993_898,
     });
     const last = rows[119]!;
@@ -121,7 +124,7 @@ describe('loanSchedule', () => {
     const rows = loanSchedule(tenYears([change('2029-03', 800, 12_500)]));
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i]!;
-      expect(row.openingMkd + row.interestMkd - row.paymentMkd).toBe(row.closingMkd);
+      expect(row.openingMkd + row.interestMkd - row.paymentMkd - row.extraMkd).toBe(row.closingMkd);
       if (i > 0) expect(row.openingMkd).toBe(rows[i - 1]!.closingMkd);
     }
   });
@@ -191,5 +194,77 @@ describe('suggestedPaymentMkd', () => {
     expect(
       suggestedPaymentMkd(tenYears([change('2026-02', 600, 500_000)]), '2027-01', 600),
     ).toBeNull();
+  });
+});
+
+describe('extra payments', () => {
+  const withExtras = (extras: LoanDefinition['extras'], changes: RateChange[] = []) => ({
+    ...tenYears(changes),
+    extras,
+  });
+
+  it("takes the extra off what is owed after that month's regular payment", () => {
+    const base = loanSchedule(tenYears());
+    const rows = loanSchedule(withExtras([{ month: '2026-03', amountMkd: 100_000 }]));
+    expect(rows.slice(0, 2)).toEqual(base.slice(0, 2));
+    expect(rows[2]).toMatchObject({ month: '2026-03', extraMkd: 100_000 });
+    expect(rows[2]!.closingMkd).toBe(base[2]!.closingMkd - 100_000);
+    expect(rows[3]!.openingMkd).toBe(rows[2]!.closingMkd);
+  });
+
+  it('adds extras of one month up and keeps every row consistent', () => {
+    const rows = loanSchedule(
+      withExtras([
+        { month: '2027-01', amountMkd: 10_000 },
+        { month: '2027-01', amountMkd: 5_000 },
+        { month: '2028-06', amountMkd: 40_000 },
+      ]),
+    );
+    expect(rows.find((r) => r.month === '2027-01')!.extraMkd).toBe(15_000);
+    for (const row of rows) {
+      expect(row.openingMkd + row.interestMkd - row.paymentMkd - row.extraMkd).toBe(row.closingMkd);
+    }
+  });
+
+  it('with the same payment, the loan ends earlier', () => {
+    expect(loanPayoffMonth(tenYears())).toBe('2035-12');
+    const earlier = loanPayoffMonth(withExtras([{ month: '2027-01', amountMkd: 200_000 }]))!;
+    expect(earlier < '2035-12').toBe(true);
+    expect(earlier > '2030-01').toBe(true);
+  });
+
+  it('never takes more than is owed, and ends that month', () => {
+    const rows = loanSchedule(withExtras([{ month: '2026-02', amountMkd: 5_000_000 }]));
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.closingMkd).toBe(0);
+    expect(rows[1]!.extraMkd).toBe(
+      rows[1]!.openingMkd + rows[1]!.interestMkd - rows[1]!.paymentMkd,
+    );
+  });
+
+  it('refuses a bad extra', () => {
+    expect(() => loanSchedule(withExtras([{ month: '2026-02', amountMkd: 0 }]))).toThrow(
+      RangeError,
+    );
+    expect(() => loanSchedule(withExtras([{ month: '2026-2', amountMkd: 5 }]))).toThrow(RangeError);
+  });
+
+  it('is taken into account by the balance and the suggested payment', () => {
+    const loan = withExtras([{ month: '2027-01', amountMkd: 200_000 }]);
+    expect(balanceAtStartOfMonth(loan, '2027-02')).toBeLessThan(
+      balanceAtStartOfMonth(tenYears(), '2027-02') - 190_000,
+    );
+    expect(suggestedPaymentMkd(loan, '2028-01', 600)!).toBeLessThan(
+      suggestedPaymentMkd(tenYears(), '2028-01', 600)!,
+    );
+  });
+});
+
+describe('loanPayoffMonth and monthAfter', () => {
+  it('is null when nothing is owed, else the last month with a payment', () => {
+    expect(loanPayoffMonth({ ...tenYears(), principalMkd: 1 })).not.toBeNull();
+    expect(monthAfter('2026-12')).toBe('2027-01');
+    expect(monthAfter('2026-03')).toBe('2026-04');
+    expect(() => monthAfter('2026-13')).toThrow(RangeError);
   });
 });

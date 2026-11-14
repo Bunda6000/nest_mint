@@ -29,6 +29,7 @@ interface Obl {
     principalMkd: number;
     annualRateBp: number;
     rateChanges: { effectiveMonth: string; annualRateBp: number; monthlyPaymentMkd: number }[];
+    extraPayments: { id: string; paidOn: string; amountMkd: number; kind: 'extra' | 'payoff' }[];
   } | null;
 }
 
@@ -147,6 +148,7 @@ function fakeApi(initial: Obl[] = [electricity()]) {
           principalMkd: Number(body?.principalMkd),
           annualRateBp: Number(body?.annualRateBp),
           rateChanges: [],
+          extraPayments: [],
         },
       };
       data.push(created);
@@ -159,6 +161,27 @@ function fakeApi(initial: Obl[] = [electricity()]) {
         return reply(404, { error: { code: 'NOT_FOUND', message: 'Obligation not found.' } });
       data.splice(index, 1);
       return new Response(null, { status: 204 });
+    }
+    const extraMatch = /^\/obligations\/([^/]+)\/(extra-payments|payoff)$/.exec(path);
+    if (extraMatch && method === 'POST') {
+      const row = data.find((o) => o.id === extraMatch[1]);
+      if (!row?.loan)
+        return reply(404, { error: { code: 'NOT_FOUND', message: 'Obligation not found.' } });
+      if (failPost) {
+        const { status, error } = failPost;
+        failPost = null;
+        return reply(status, { error });
+      }
+      row.loan.extraPayments = [
+        ...row.loan.extraPayments,
+        {
+          id: `x${row.loan.extraPayments.length + 1}`,
+          paidOn: String(body?.paidOn),
+          amountMkd: Number(body?.amountMkd),
+          kind: extraMatch[2] === 'payoff' ? 'payoff' : 'extra',
+        },
+      ];
+      return reply(201, row);
     }
     const rateMatch = /^\/obligations\/([^/]+)\/rate-changes$/.exec(path);
     if (rateMatch && method === 'POST') {
@@ -216,6 +239,8 @@ function fakeApi(initial: Obl[] = [electricity()]) {
       calls.filter((c) => c.path !== '/auth/refresh').map((c) => `${c.method} ${c.path}`),
     posts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations'),
     patches: () => calls.filter((c) => c.method === 'PATCH'),
+    extraPosts: () =>
+      calls.filter((c) => c.method === 'POST' && /\/(extra-payments|payoff)$/.test(c.path)),
     rateChangePosts: () =>
       calls.filter((c) => c.method === 'POST' && c.path.endsWith('/rate-changes')),
     loanPosts: () => calls.filter((c) => c.method === 'POST' && c.path === '/obligations/loans'),
@@ -738,7 +763,13 @@ describe('ObligationsPage: changing a loan', () => {
     startMonth: '2026-01',
     endMonth: '2035-12',
     kind: 'loan',
-    loan: { loanType: 'housing', principalMkd: 1_000_000, annualRateBp: 600, rateChanges: [] },
+    loan: {
+      loanType: 'housing',
+      principalMkd: 1_000_000,
+      annualRateBp: 600,
+      rateChanges: [],
+      extraPayments: [],
+    },
     ...over,
   });
 
@@ -797,6 +828,7 @@ describe('ObligationsPage: changing a loan', () => {
           rateChanges: [
             { effectiveMonth: '2026-01', annualRateBp: 700, monthlyPaymentMkd: 12_000 },
           ],
+          extraPayments: [],
         },
       }),
     ]);
@@ -896,5 +928,119 @@ describe('ObligationsPage: removing', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(api.removals()).toHaveLength(0);
     expect(screen.getByText('Water')).toBeTruthy();
+  });
+});
+
+describe('ObligationsPage: extra payment and payoff', () => {
+  const loanRow = (): Obl => ({
+    id: 'loan1',
+    name: 'Mortgage',
+    payee: 'Bank',
+    categoryId: WATER_ID,
+    categoryName: 'Water',
+    expectedAmountMkd: 10_000,
+    dueDay: 5,
+    recurrence: 'monthly',
+    everyNMonths: null,
+    months: null,
+    startMonth: '2026-01',
+    endMonth: '2035-12',
+    kind: 'loan',
+    loan: {
+      loanType: 'housing',
+      principalMkd: 1_000_000,
+      annualRateBp: 600,
+      rateChanges: [],
+      extraPayments: [],
+    },
+  });
+
+  async function openExtra(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Extra payment on Mortgage' }));
+  }
+
+  it('saves an extra payment with the chosen effect and lists it', async () => {
+    const api = fakeApi([loanRow()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openExtra(user);
+    fireEvent.change(screen.getByLabelText('Paid on'), { target: { value: '2026-05-10' } });
+    await user.type(screen.getByLabelText(/Extra amount/), '20000');
+    await user.click(screen.getByLabelText('Keep the payment, end the loan earlier'));
+    await user.click(screen.getByRole('button', { name: 'Save extra payment' }));
+    await waitFor(() => expect(api.extraPosts()).toHaveLength(1));
+    expect(api.extraPosts()[0]!.path).toBe('/obligations/loan1/extra-payments');
+    expect(api.extraPosts()[0]!.body).toEqual({
+      paidOn: '2026-05-10',
+      amountMkd: 20_000,
+      effect: 'shorten',
+    });
+    expect(await screen.findByText('Extra 20,000 MKD on 2026-05-10')).toBeTruthy();
+  });
+
+  it('asks for the new payment only when the payment is to be lowered', async () => {
+    const api = fakeApi([loanRow()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openExtra(user);
+    expect(screen.queryByLabelText(/New monthly payment/)).toBeNull();
+    await user.click(screen.getByLabelText('Lower the payment, keep the end date'));
+    await user.type(screen.getByLabelText(/Extra amount/), '20000');
+    await user.click(screen.getByRole('button', { name: 'Save extra payment' }));
+    expect(await screen.findByText('Enter the new monthly payment')).toBeTruthy();
+    expect(api.extraPosts()).toHaveLength(0);
+    await user.type(screen.getByLabelText(/New monthly payment/), '9000');
+    await user.click(screen.getByRole('button', { name: 'Save extra payment' }));
+    await waitFor(() => expect(api.extraPosts()).toHaveLength(1));
+    expect(api.extraPosts()[0]!.body).toMatchObject({
+      effect: 'lower_payment',
+      newMonthlyPaymentMkd: 9_000,
+    });
+  });
+
+  it("shows the server's message when the extra payment is refused", async () => {
+    const api = fakeApi([loanRow()]);
+    api.failNextPost(400, {
+      code: 'VALIDATION_FAILED',
+      message: 'Some fields are invalid.',
+      details: { amountMkd: 'That pays off the whole loan. Use Pay off instead.' },
+    });
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await openExtra(user);
+    await user.type(screen.getByLabelText(/Extra amount/), '999999');
+    await user.click(screen.getByRole('button', { name: 'Save extra payment' }));
+    expect(await screen.findByText(/Use Pay off instead/)).toBeTruthy();
+  });
+
+  it('pays off a loan, shows it as paid off and takes the loan actions away', async () => {
+    const api = fakeApi([loanRow()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Pay off Mortgage' }));
+    fireEvent.change(screen.getByLabelText('Paid on'), { target: { value: '2026-11-05' } });
+    await user.type(screen.getByLabelText(/Payoff amount/), '950000');
+    await user.click(screen.getByRole('button', { name: 'Pay off loan' }));
+    await waitFor(() => expect(api.extraPosts()).toHaveLength(1));
+    expect(api.extraPosts()[0]!.path).toBe('/obligations/loan1/payoff');
+    expect(api.extraPosts()[0]!.body).toEqual({ paidOn: '2026-11-05', amountMkd: 950_000 });
+    expect(await screen.findByText('Paid off on 2026-11-05 with 950,000 MKD')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Pay off Mortgage' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Extra payment on Mortgage' })).toBeNull();
+  });
+
+  it('sends nothing without an amount', async () => {
+    const api = fakeApi([loanRow()]);
+    renderPage();
+    await loaded();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Pay off Mortgage' }));
+    await user.click(screen.getByRole('button', { name: 'Pay off loan' }));
+    expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
+    expect(api.extraPosts()).toHaveLength(0);
   });
 });

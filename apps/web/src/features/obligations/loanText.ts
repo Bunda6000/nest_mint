@@ -1,5 +1,12 @@
-import { loanTermsInMonth } from '@nestmint/finance-engine';
+import {
+  balanceAtStartOfMonth,
+  type LoanDefinition,
+  loanTermsInMonth,
+  monthAfter,
+} from '@nestmint/finance-engine';
 import type {
+  ExtraPaymentEffect,
+  ExtraPaymentResponse,
   LoanDetails,
   LoanType,
   ObligationResponse,
@@ -64,3 +71,54 @@ export function currentLoanTerms(
 export function describeRateChange(change: RateChangeResponse): string {
   return `From ${change.effectiveMonth}: ${formatRateBp(change.annualRateBp)}, ${formatMkd(change.monthlyPaymentMkd)} a month`;
 }
+
+/** The loan as the finance engine wants it; `null` for a bill. */
+export function loanDefinitionOf(
+  obligation: Pick<ObligationResponse, 'expectedAmountMkd' | 'loan' | 'startMonth' | 'endMonth'>,
+): LoanDefinition | null {
+  const { loan, endMonth } = obligation;
+  if (!loan || !endMonth) return null;
+  return {
+    principalMkd: loan.principalMkd,
+    startMonth: obligation.startMonth,
+    endMonth,
+    initial: { annualRateBp: loan.annualRateBp, monthlyPaymentMkd: obligation.expectedAmountMkd },
+    changes: loan.rateChanges,
+    extras: loan.extraPayments.map((e) => ({
+      month: e.paidOn.slice(0, 7),
+      amountMkd: e.amountMkd,
+    })),
+  };
+}
+
+/** The day the loan was paid off, or `null`. */
+export function payoffDay(loan: LoanDetails): string | null {
+  return loan.extraPayments.find((e) => e.kind === 'payoff')?.paidOn ?? null;
+}
+
+/**
+ * An estimate of what is still owed after this month's payment, worked out from the loan's own
+ * figures. The bank's statement is the real number. `null` when the loan is paid off or over.
+ */
+export function estimateStillOwed(
+  obligation: Pick<ObligationResponse, 'expectedAmountMkd' | 'loan' | 'startMonth' | 'endMonth'>,
+  thisMonth: string,
+): number | null {
+  const definition = loanDefinitionOf(obligation);
+  if (!definition || !obligation.loan || payoffDay(obligation.loan)) return null;
+  const owed = balanceAtStartOfMonth(definition, monthAfter(thisMonth));
+  return owed > 0 ? owed : null;
+}
+
+/** "Extra 20,000 MKD on 2026-05-10" / "Paid off on 2026-11-05 with 20,000 MKD". */
+export function describeExtraPayment(payment: ExtraPaymentResponse): string {
+  return payment.kind === 'payoff'
+    ? `Paid off on ${payment.paidOn} with ${formatMkd(payment.amountMkd)}`
+    : `Extra ${formatMkd(payment.amountMkd)} on ${payment.paidOn}`;
+}
+
+export const EXTRA_EFFECT_LABELS: Record<ExtraPaymentEffect, string> = {
+  shorten: 'Keep the payment, end the loan earlier',
+  lower_payment: 'Lower the payment, keep the end date',
+  none: 'No change to the bills',
+};

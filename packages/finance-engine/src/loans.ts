@@ -82,6 +82,13 @@ export function loanTermsInMonth(
   return { annualRateBp: current.annualRateBp, monthlyPaymentMkd: current.monthlyPaymentMkd };
 }
 
+/** Money paid on top of the regular payment in a month; it goes straight off what is owed. */
+export interface LoanExtra {
+  /** "YYYY-MM". */
+  month: string;
+  amountMkd: number;
+}
+
 export interface LoanDefinition {
   principalMkd: number;
   /** First payment month, "YYYY-MM". */
@@ -91,6 +98,8 @@ export interface LoanDefinition {
   /** The terms from the first month. */
   initial: LoanTerms;
   changes: readonly RateChange[];
+  /** Extra payments and payoffs. Several in one month add up. */
+  extras?: readonly LoanExtra[];
 }
 
 export interface LoanScheduleRow {
@@ -102,7 +111,9 @@ export interface LoanScheduleRow {
   interestMkd: number;
   /** What is paid that month. */
   paymentMkd: number;
-  /** What is still owed after the payment. */
+  /** Extra money paid that month, after the regular payment (0 when none). */
+  extraMkd: number;
+  /** What is still owed after the payment and any extra. */
   closingMkd: number;
 }
 
@@ -112,11 +123,24 @@ function nextMonth(month: string): string {
   return m === 12 ? `${year + 1}-01` : `${month.slice(0, 5)}${String(m + 1).padStart(2, '0')}`;
 }
 
+function extraIn(extras: readonly LoanExtra[] | undefined, month: string): number {
+  let total = 0;
+  for (const extra of extras ?? []) {
+    assertMonth(extra.month, 'extra month');
+    if (!Number.isInteger(extra.amountMkd) || extra.amountMkd < 1) {
+      throw new RangeError('extra amountMkd must be a whole number of at least 1');
+    }
+    if (extra.month === month) total += extra.amountMkd;
+  }
+  return total;
+}
+
 /**
  * Month by month: interest on what is owed, then the payment in force. A payment is never more than
  * what is owed, so the loan ends when it is paid off, and the last month (the loan's end) pays
  * whatever is left, which can differ a little from the regular payment (rounding) or be larger when
- * the typed payments do not cover the interest. Rows stop once nothing is owed.
+ * the typed payments do not cover the interest. An extra payment comes off what is owed after that
+ * month's regular payment. Rows stop once nothing is owed, so the last row is the payoff month.
  */
 export function loanSchedule(loan: LoanDefinition): LoanScheduleRow[] {
   if (!Number.isInteger(loan.principalMkd) || loan.principalMkd < 1) {
@@ -131,14 +155,16 @@ export function loanSchedule(loan: LoanDefinition): LoanScheduleRow[] {
     const interestMkd = Math.round((owed * terms.annualRateBp) / 120_000);
     const dueMkd = owed + interestMkd;
     const paymentMkd = i === months - 1 ? dueMkd : Math.min(terms.monthlyPaymentMkd, dueMkd);
+    const extraMkd = Math.min(extraIn(loan.extras, month), dueMkd - paymentMkd);
     rows.push({
       month,
       openingMkd: owed,
       interestMkd,
       paymentMkd,
-      closingMkd: dueMkd - paymentMkd,
+      extraMkd,
+      closingMkd: dueMkd - paymentMkd - extraMkd,
     });
-    owed = dueMkd - paymentMkd;
+    owed = dueMkd - paymentMkd - extraMkd;
     month = nextMonth(month);
   }
   return rows;
@@ -171,4 +197,16 @@ export function suggestedPaymentMkd(
   if (owed < 1) return null;
   const from = effectiveMonth < loan.startMonth ? loan.startMonth : effectiveMonth;
   return annuityPaymentMkd(owed, newRateBp, loanTermMonths(from, loan.endMonth));
+}
+
+/** The month the last money is paid (the loan is gone after it), or `null` when the loan has no rows. */
+export function loanPayoffMonth(loan: LoanDefinition): string | null {
+  const rows = loanSchedule(loan);
+  return rows.length === 0 ? null : rows[rows.length - 1]!.month;
+}
+
+/** The month after a "YYYY-MM" month. */
+export function monthAfter(month: string): string {
+  assertMonth(month, 'month');
+  return nextMonth(month);
 }

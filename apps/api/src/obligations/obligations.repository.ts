@@ -1,4 +1,5 @@
 import type {
+  ExtraPaymentKind,
   LoanDetails,
   LoanType,
   ObligationRecurrence,
@@ -24,7 +25,7 @@ export interface NewObligation {
   startMonth: string;
   endMonth: string | null;
   /** Set for a loan (the payee is then the lender); null for a plain bill. */
-  loan?: Omit<LoanDetails, 'rateChanges'> | null;
+  loan?: Omit<LoanDetails, 'rateChanges' | 'extraPayments'> | null;
 }
 
 /** Only the fields that are present change. A `null` endMonth takes the end away, a `null` payee clears it. */
@@ -69,6 +70,13 @@ export interface ObligationsRepository {
     userId: string,
     id: string,
     change: RateChangeResponse,
+  ): Promise<ObligationResponse | null>;
+
+  /** Records money paid towards a loan. `null` when the user has no such obligation. */
+  addExtraPayment(
+    userId: string,
+    id: string,
+    payment: { paidOn: string; amountMkd: number; kind: ExtraPaymentKind },
   ): Promise<ObligationResponse | null>;
 
   /**
