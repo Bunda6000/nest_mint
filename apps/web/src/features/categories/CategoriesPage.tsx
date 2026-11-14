@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import type { CategoryActions, ItemKind } from './categoryActions';
 import { GroupCard } from './GroupCard';
 import { NameForm } from './NameForm';
+import { useT } from '../../i18n/translate';
 
 type Load =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; data: CategoriesResponse };
@@ -25,6 +26,7 @@ function swapped(ids: string[], id: string, direction: -1 | 1): string[] | null 
 
 export function CategoriesPage() {
   const { authedGet, authedSend } = useAuth();
+  const { category: label } = useT();
   const [editing, setEditing] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [addingGroup, setAddingGroup] = useState(false);
@@ -155,14 +157,14 @@ export function CategoriesPage() {
         <ul className="mt-6 flex flex-col gap-4">
           {groups.map((group) => (
             <li key={group.id} className="rounded-lg border p-4">
-              <h2 className="font-medium">{group.name}</h2>
+              <h2 className="font-medium">{label(group.name)}</h2>
               <ul className="mt-2 flex flex-wrap gap-2">
                 {group.categories.map((category) => (
                   <li
                     key={category.id}
                     className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700"
                   >
-                    {category.name}
+                    {label(category.name)}
                   </li>
                 ))}
               </ul>

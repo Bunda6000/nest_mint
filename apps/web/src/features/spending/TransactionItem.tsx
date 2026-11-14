@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { formatDay, formatEurCents, formatMkd } from '../../format';
 import { groupsForEdit } from './editGroups';
 import { ExpenseForm, type ExpenseValues } from './ExpenseForm';
+import { useT } from '../../i18n/translate';
 
 interface TransactionItemProps {
   transaction: TransactionResponse;
@@ -23,6 +24,7 @@ const small =
 /** One transaction in the list: view, edit in place, or delete after a confirmation. */
 export function TransactionItem(props: TransactionItemProps) {
   const { transaction: t, locked } = props;
+  const { category: label } = useT();
   const [mode, setMode] = useState<'view' | 'edit' | 'confirm'>('view');
   const [deleting, setDeleting] = useState(false);
 
@@ -54,13 +56,13 @@ export function TransactionItem(props: TransactionItemProps) {
     );
   }
 
-  const label = `${t.categoryName}, ${formatMkd(t.amountMkd)}, ${formatDay(t.occurredOn)}`;
+  const summary = `${label(t.categoryName)}, ${formatMkd(t.amountMkd)}, ${formatDay(t.occurredOn)}`;
 
   return (
     <li className="p-3">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-medium">{t.categoryName}</p>
+          <p className="font-medium">{label(t.categoryName)}</p>
           {t.kind === 'cash_withdrawal' && (
             <p className="text-xs font-medium text-emerald-700">Cash withdrawal</p>
           )}
@@ -78,7 +80,7 @@ export function TransactionItem(props: TransactionItemProps) {
       {mode === 'confirm' ? (
         <div
           role="alertdialog"
-          aria-label={`Delete ${label}?`}
+          aria-label={`Delete ${summary}?`}
           className="mt-3 rounded-lg bg-red-50 p-3 text-sm"
         >
           <p className="text-red-800">Delete this expense? This cannot be undone.</p>
@@ -112,7 +114,7 @@ export function TransactionItem(props: TransactionItemProps) {
           <button
             type="button"
             disabled={locked}
-            aria-label={`Edit ${label}`}
+            aria-label={`Edit ${summary}`}
             onClick={() => {
               setMode('edit');
               props.onEditing(true);
@@ -124,7 +126,7 @@ export function TransactionItem(props: TransactionItemProps) {
           <button
             type="button"
             disabled={locked}
-            aria-label={`Delete ${label}`}
+            aria-label={`Delete ${summary}`}
             onClick={() => setMode('confirm')}
             className={small}
           >

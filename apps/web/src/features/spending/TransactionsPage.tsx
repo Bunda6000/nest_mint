@@ -8,11 +8,13 @@ import { useAuth } from '../auth/AuthContext';
 import type { ExpenseValues } from './ExpenseForm';
 import { currentMonth, formatMonth, lastDayOfMonth, shiftMonth } from './months';
 import { TransactionItem } from './TransactionItem';
+import { useT } from '../../i18n/translate';
 
 type Load<T> = { status: 'loading' } | { status: 'error' } | { status: 'ready'; data: T };
 
 export function TransactionsPage() {
   const { authedGet, authedSend } = useAuth();
+  const { category: label, t } = useT();
   const thisMonth = currentMonth();
   const [month, setMonth] = useState(thisMonth);
   const [categoryId, setCategoryId] = useState('');
@@ -131,12 +133,14 @@ export function TransactionsPage() {
           }}
           className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
         >
-          <option value="">All categories</option>
+          <option value="">{t('category.allCategories')}</option>
           {groups.map((group) => (
-            <optgroup key={group.id} label={group.name}>
+            <optgroup key={group.id} label={label(group.name)}>
               {group.categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.archived ? `${category.name} (archived)` : category.name}
+                  {category.archived
+                    ? `${label(category.name)} ${t('category.archivedSuffix')}`
+                    : label(category.name)}
                 </option>
               ))}
             </optgroup>

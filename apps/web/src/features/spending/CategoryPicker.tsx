@@ -1,4 +1,5 @@
 import type { CategoryGroupResponse } from '@nestmint/shared';
+import { useT } from '../../i18n/translate';
 
 interface CategoryPickerProps {
   groups: CategoryGroupResponse[];
@@ -9,6 +10,7 @@ interface CategoryPickerProps {
 
 /** One tap on a chip picks the category. Groups with nothing to pick are left out. */
 export function CategoryPicker({ groups, value, onChange, error }: CategoryPickerProps) {
+  const { category: label } = useT();
   return (
     <fieldset aria-describedby={error ? 'category-error' : undefined}>
       <legend className="text-sm font-medium text-gray-700">Category</legend>
@@ -17,7 +19,7 @@ export function CategoryPicker({ groups, value, onChange, error }: CategoryPicke
           .filter((group) => group.categories.length > 0)
           .map((group) => (
             <div key={group.id}>
-              <p className="text-xs uppercase tracking-wide text-gray-500">{group.name}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">{label(group.name)}</p>
               <div className="mt-1 flex flex-wrap gap-2">
                 {group.categories.map((category) => (
                   <label
@@ -32,7 +34,7 @@ export function CategoryPicker({ groups, value, onChange, error }: CategoryPicke
                       onChange={() => onChange(category.id)}
                       className="sr-only"
                     />
-                    {category.name}
+                    {label(category.name)}
                   </label>
                 ))}
               </div>

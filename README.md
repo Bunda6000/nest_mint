@@ -14,6 +14,8 @@ Product docs (analysis, requirements, PRD, roadmap, backlog) live in Notion unde
 | `packages/shared`         | Validation schemas and API types (web + API) |
 | `docs/adr`                | Architecture decisions                       |
 
+Texts: English is the complete set in `apps/web/src/i18n/messages.ts`; Macedonian is added key by key and falls back to English (ADR-027).
+
 ## Run locally
 
 Requirements: Node 24 (22+ works), pnpm 9, Docker (for PostgreSQL).

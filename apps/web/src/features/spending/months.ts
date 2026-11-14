@@ -1,3 +1,5 @@
+import { currentLocale } from '../../i18n/language';
+
 /** Calendar months as "YYYY-MM" strings, e.g. "2026-11". Everything here ignores time zones. */
 
 /** The phone's own current month. */
@@ -20,7 +22,7 @@ export function lastDayOfMonth(month: string): string {
 }
 
 /** "2026-11" → "November 2026". */
-export function formatMonth(month: string, locale = 'en-US'): string {
+export function formatMonth(month: string, locale = currentLocale()): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'long',
     year: 'numeric',
@@ -29,7 +31,7 @@ export function formatMonth(month: string, locale = 'en-US'): string {
 }
 
 /** "2026-11" → "Nov", for the labels under a chart. */
-export function shortMonth(month: string, locale = 'en-US'): string {
+export function shortMonth(month: string, locale = currentLocale()): string {
   return new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' }).format(
     new Date(`${month}-01T00:00:00Z`),
   );

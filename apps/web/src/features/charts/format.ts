@@ -1,3 +1,5 @@
+import { currentLocale } from '../../i18n/language';
+
 /** A share of a total as a whole percent; "<1%" instead of a misleading "0%" for a small one. */
 export function formatShare(share: number): string {
   const percent = share * 100;
@@ -6,7 +8,7 @@ export function formatShare(share: number): string {
 }
 
 /** "2026-11-02" → "Nov 2". */
-export function formatDay(day: string, locale = 'en-US'): string {
+export function formatDay(day: string, locale = currentLocale()): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',

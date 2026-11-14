@@ -1,10 +1,11 @@
 import { convertMkdToEur } from '@nestmint/finance-engine';
 import type { BudgetCellResponse } from '@nestmint/shared';
+import { currentLocale } from '../../i18n/language';
 import { lastDayOfMonth } from '../spending/months';
 import type { Currency } from '../home/currency';
 
 const MINUS = '−';
-const whole = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const whole = () => new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 0 });
 
 /**
  * An amount for a grid cell: whole numbers without a unit (the toggle above the grid says which),
@@ -16,7 +17,7 @@ export function gridAmount(mkd: number, currency: Currency, month: string): stri
     currency === 'MKD'
       ? mkd
       : Math.round(convertMkdToEur(mkd, lastDayOfMonth(month)).eurCents / 100);
-  const text = whole.format(Math.abs(value));
+  const text = whole().format(Math.abs(value));
   return value < 0 ? `${MINUS}${text}` : text;
 }
 

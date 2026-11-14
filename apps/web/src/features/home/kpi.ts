@@ -1,5 +1,6 @@
 import { type AmountChange, convertMkdToEur } from '@nestmint/finance-engine';
 import { formatEurCents, formatMkd } from '../../format';
+import { currentLocale } from '../../i18n/language';
 import { lastDayOfMonth } from '../spending/months';
 import type { Currency } from './currency';
 
@@ -25,11 +26,12 @@ function formatSigned(mkd: number, currency: Currency, month: string): string {
   return `${sign}${formatAmount(Math.abs(mkd), currency, month)}`;
 }
 
-const percent = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 1 });
+const percent = () =>
+  new Intl.NumberFormat(currentLocale(), { style: 'percent', maximumFractionDigits: 1 });
 
 /** 0.08 → "+8%", −0.177 → "−17.7%", a rounded 0 → "0%". */
 export function formatRatio(ratio: number): string {
-  const text = percent.format(Math.abs(ratio));
+  const text = percent().format(Math.abs(ratio));
   if (text === '0%') return text;
   return `${ratio > 0 ? '+' : MINUS}${text}`;
 }

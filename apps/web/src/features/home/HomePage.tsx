@@ -3,6 +3,8 @@ import type { MonthSummaryResponse } from '@nestmint/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { formatRate } from '../../format';
+import { LanguageSwitch } from '../../i18n/LanguageSwitch';
+import { useT } from '../../i18n/translate';
 import { useAuth } from '../auth/AuthContext';
 import { ChartsSection } from '../charts/ChartsSection';
 import { currentMonth, formatMonth, shiftMonth } from '../spending/months';
@@ -31,6 +33,7 @@ const CURRENCIES: Currency[] = ['EUR', 'MKD'];
 
 export function HomePage() {
   const { state, logout, authedGet } = useAuth();
+  const { t } = useT();
   const name = state.status === 'authenticated' ? (state.user.displayName ?? state.user.email) : '';
 
   const thisMonth = currentMonth();
@@ -76,21 +79,24 @@ export function HomePage() {
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">NestMint</h1>
-          <p className="mt-1 text-sm text-gray-500">Hello, {name}.</p>
+          <p className="mt-1 text-sm text-gray-500">{t('home.hello', { name })}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void logout()}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
-        >
-          Log out
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={() => void logout()}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+          >
+            {t('common.logOut')}
+          </button>
+          <LanguageSwitch />
+        </div>
       </header>
 
       <div className="mt-6 flex items-center justify-between gap-2">
         <button
           type="button"
-          aria-label="Previous month"
+          aria-label={t('home.prevMonth')}
           onClick={() => goTo(shiftMonth(month, -1))}
           className="rounded-lg border border-gray-300 px-3 py-1.5"
         >
@@ -101,7 +107,7 @@ export function HomePage() {
         </h2>
         <button
           type="button"
-          aria-label="Next month"
+          aria-label={t('home.nextMonth')}
           onClick={() => goTo(shiftMonth(month, 1))}
           disabled={month >= thisMonth}
           className="rounded-lg border border-gray-300 px-3 py-1.5 disabled:opacity-40"
@@ -110,7 +116,7 @@ export function HomePage() {
         </button>
       </div>
 
-      <div role="group" aria-label="Currency" className="mt-3 flex justify-center gap-2">
+      <div role="group" aria-label={t('home.currency')} className="mt-3 flex justify-center gap-2">
         {CURRENCIES.map((option) => (
           <button
             key={option}
@@ -130,13 +136,13 @@ export function HomePage() {
 
       {load.status === 'loading' && (
         <p className="mt-6 text-gray-500" role="status">
-          Loading…
+          {t('home.loading')}
         </p>
       )}
 
       {load.status === 'error' && (
         <div role="alert" className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">
-          <p>Could not load this month.</p>
+          <p>{t('home.loadError')}</p>
           <button
             type="button"
             onClick={() => {
@@ -145,7 +151,7 @@ export function HomePage() {
             }}
             className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 hover:bg-red-100"
           >
-            Try again
+            {t('home.tryAgain')}
           </button>
         </div>
       )}
@@ -154,7 +160,7 @@ export function HomePage() {
         <>
           <div className="mt-4 grid grid-cols-2 gap-4">
             <KpiCard
-              label="Income"
+              label={t('home.income')}
               value={formatAmount(load.current.income, currency, month)}
               change={
                 comparison
@@ -163,7 +169,7 @@ export function HomePage() {
               }
             />
             <KpiCard
-              label="Expenses"
+              label={t('home.expenses')}
               value={formatAmount(load.current.expenses, currency, month)}
               change={
                 comparison
@@ -172,26 +178,26 @@ export function HomePage() {
               }
             />
             <KpiCard
-              label="Net"
+              label={t('home.net')}
               value={formatAmount(load.current.net, currency, month)}
               change={
                 comparison ? amountChangeView('net', comparison.net, currency, month) : undefined
               }
             />
             <KpiCard
-              label="Savings rate"
+              label={t('home.savingsRate')}
               value={formatRate(load.current.savingsRate)}
               change={comparison ? rateChangeView(comparison.savingsRate) : undefined}
             />
           </div>
           <p className="mt-3 text-xs text-gray-500">
             {comparison
-              ? `Change compared with ${formatMonth(previousMonth)}.`
-              : `No data in ${formatMonth(previousMonth)} to compare with.`}
+              ? t('home.comparedWith', { month: formatMonth(previousMonth) })
+              : t('home.noDataToCompare', { month: formatMonth(previousMonth) })}
           </p>
           {!hasData(load.current) && (
             <p className="mt-3 text-sm text-gray-500">
-              Nothing recorded in {formatMonth(month)} yet.
+              {t('home.nothingYet', { month: formatMonth(month) })}
             </p>
           )}
           <ChartsSection key={`${month}-${attempt}`} month={month} currency={currency} />
@@ -202,26 +208,26 @@ export function HomePage() {
         to="/expenses/new"
         className="mt-6 block rounded-lg bg-emerald-700 px-4 py-3 text-center font-medium text-white"
       >
-        Add expense
+        {t('home.addExpense')}
       </Link>
       <nav className="mt-4 flex gap-4">
         <Link to="/transactions" className="text-emerald-700 underline">
-          Expenses
+          {t('nav.expenses')}
         </Link>
         <Link to="/income" className="text-emerald-700 underline">
-          Income
+          {t('nav.income')}
         </Link>
         <Link to="/bills" className="text-emerald-700 underline">
-          Bills
+          {t('nav.bills')}
         </Link>
         <Link to="/budget" className="text-emerald-700 underline">
-          Budget
+          {t('nav.budget')}
         </Link>
         <Link to="/categories" className="text-emerald-700 underline">
-          Categories
+          {t('nav.categories')}
         </Link>
         <Link to="/import" className="text-emerald-700 underline">
-          Import
+          {t('nav.import')}
         </Link>
       </nav>
     </section>
