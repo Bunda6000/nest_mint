@@ -220,6 +220,9 @@ export function HomePage() {
         <Link to="/categories" className="text-emerald-700 underline">
           Categories
         </Link>
+        <Link to="/import" className="text-emerald-700 underline">
+          Import
+        </Link>
       </nav>
     </section>
   );

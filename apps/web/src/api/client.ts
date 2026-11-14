@@ -25,7 +25,9 @@ export type ApiMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 async function request<T>(method: ApiMethod, path: string, options: RequestOptions): Promise<T> {
   const headers: Record<string, string> = {};
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  const isForm = options.body instanceof FormData;
+  // A form (file upload) sets its own Content-Type with the multipart boundary.
+  if (options.body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
 
   let response: Response;
@@ -35,7 +37,9 @@ async function request<T>(method: ApiMethod, path: string, options: RequestOptio
       headers,
       // Sends the HttpOnly refresh cookie to the auth endpoints.
       credentials: 'include',
-      ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+      ...(options.body !== undefined
+        ? { body: isForm ? (options.body as FormData) : JSON.stringify(options.body) }
+        : {}),
     });
   } catch {
     throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the server. Check your connection.');
