@@ -27,6 +27,30 @@ describe('parseBudgetGrid', () => {
     expect(parsed.monthlyExpensesMkd).toEqual({ '2025-01': 21_537, '2025-03': 15_500 });
   });
 
+  it('lists a blank month between filled ones and an error cell for review', () => {
+    expect(parsed.anomalies).toEqual([
+      expect.objectContaining({ kind: 'gap', lineKey: 'Банки|Станбен', month: '2025-02' }),
+      expect.objectContaining({
+        kind: 'error_cell',
+        lineKey: 'Транспорт|Гориво',
+        month: '2025-02',
+      }),
+    ]);
+    expect(parsed.expenses.map((l) => l.key)).toEqual([
+      'Банки|Станбен',
+      'Банки|Кеш',
+      'Транспорт|Гориво',
+    ]);
+  });
+
+  it('flags a negative amount instead of importing it', () => {
+    const grid = sampleGrid().map((row) => [...row]);
+    grid[11]![2] = -5; // Кеш, January
+    const result = parseBudgetGrid(grid, 2025);
+    expect(result.anomalies).toContainEqual(expect.objectContaining({ kind: 'negative' }));
+    expect(result.expenses.find((l) => l.name === 'Кеш')!.amountsMkd).toEqual({});
+  });
+
   it('accepts the sheet totals when they match its lines', () => {
     expect(parsed.warnings).toEqual([]);
   });

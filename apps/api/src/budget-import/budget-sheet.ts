@@ -33,6 +33,7 @@ export type ParsedBudget = Pick<
   | 'monthlyIncomeMkd'
   | 'monthlyExpensesMkd'
   | 'warnings'
+  | 'anomalies'
 >;
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
@@ -41,6 +42,14 @@ const key = (value: unknown): string => text(value).toLowerCase();
 function whole(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return Math.round(value);
+}
+
+/** A cell that shows an error such as #REF!; `readBudgetSheet` hands these over as `{ error }`. */
+function errorOf(value: unknown): string | null {
+  if (value && typeof value === 'object' && 'error' in value) {
+    return String((value as { error: unknown }).error);
+  }
+  return null;
 }
 
 const isMonthHeader = (row: readonly unknown[]): boolean =>
@@ -59,6 +68,8 @@ export function parseBudgetGrid(grid: Grid, year: number): ParsedBudget {
   const income: Line[] = [];
   const expenses: Line[] = [];
   const warnings: string[] = [];
+  const anomalies: ParsedBudget['anomalies'] = [];
+  const usedKeys = new Set<string>();
   let side: 'income' | 'expenses' = 'income';
   let section = '';
   let block: Line[] = [];
@@ -90,13 +101,61 @@ export function parseBudgetGrid(grid: Grid, year: number): ParsedBudget {
       if (section) checkTotals(row);
     } else if (label && section) {
       const amountsMkd: Record<string, number> = {};
+      const problems: ParsedBudget['anomalies'] = [];
+      const lineSection = side === 'income' ? 'Приходи' : section;
       for (let m = 0; m < 12; m++) {
-        const amount = whole(row[FIRST_MONTH_COLUMN + m]);
-        if (amount !== null && amount !== 0) amountsMkd[monthKey(year, m)] = amount;
+        const mk = monthKey(year, m);
+        const cell = row[FIRST_MONTH_COLUMN + m];
+        const error = errorOf(cell);
+        const amount = whole(cell);
+        if (error) {
+          problems.push({
+            kind: 'error_cell',
+            lineKey: '',
+            section: lineSection,
+            name: label,
+            month: mk,
+            message: `The cell shows ${error}`,
+          });
+        } else if (amount !== null && amount < 0) {
+          problems.push({
+            kind: 'negative',
+            lineKey: '',
+            section: lineSection,
+            name: label,
+            month: mk,
+            message: `The amount is negative (${amount})`,
+          });
+        } else if (amount !== null && amount !== 0) amountsMkd[mk] = amount;
       }
-      if (Object.keys(amountsMkd).length === 0) continue; // a label with nothing entered (e.g. a car's name)
+      const months = Object.keys(amountsMkd);
+      if (months.length === 0 && problems.length === 0) continue; // a label with nothing entered (e.g. a car's name)
+      // A month left empty between two filled ones of an expense line may be a forgotten entry.
+      if (side === 'expenses' && months.length >= 2) {
+        const flagged = new Set(problems.map((p) => p.month));
+        const first = months[0]!;
+        const last = months[months.length - 1]!;
+        for (let m = 0; m < 12; m++) {
+          const mk = monthKey(year, m);
+          if (mk > first && mk < last && !(mk in amountsMkd) && !flagged.has(mk)) {
+            problems.push({
+              kind: 'gap',
+              lineKey: '',
+              section: lineSection,
+              name: label,
+              month: mk,
+              message: 'Empty between months that have an amount',
+            });
+          }
+        }
+      }
+      let lineKey = `${lineSection}|${label}`;
+      for (let n = 2; usedKeys.has(lineKey); n++) lineKey = `${lineSection}|${label}#${n}`;
+      usedKeys.add(lineKey);
+      for (const problem of problems) anomalies.push({ ...problem, lineKey });
       const line: Line = {
-        section: side === 'income' ? 'Приходи' : section,
+        key: lineKey,
+        section: lineSection,
         name: label,
         amountsMkd,
         totalMkd: Object.values(amountsMkd).reduce((a, b) => a + b, 0),
@@ -127,5 +186,8 @@ export function parseBudgetGrid(grid: Grid, year: number): ParsedBudget {
     monthlyIncomeMkd: monthly(income),
     monthlyExpensesMkd: monthly(expenses),
     warnings,
+    anomalies: anomalies.sort(
+      (a, b) => a.lineKey.localeCompare(b.lineKey) || a.month.localeCompare(b.month),
+    ),
   };
 }

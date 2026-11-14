@@ -10,6 +10,7 @@ function plain(value: ExcelJS.CellValue): unknown {
   if (value && typeof value === 'object') {
     if ('result' in value) return plain(value.result as ExcelJS.CellValue);
     if ('richText' in value) return value.richText.map((part) => part.text).join('');
+    if ('error' in value) return { error: String(value.error) };
     if (value instanceof Date) return value;
     return null;
   }
