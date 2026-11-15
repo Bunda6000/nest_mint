@@ -9,7 +9,18 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
     if (!connectionString) {
       throw new Error('DATABASE_URL is not set');
     }
-    super({ adapter: new PrismaPg({ connectionString }) });
+    // Serverless: every warm instance holds its own pool, and the hosted database
+    // (Supabase pooler) only allows a few clients in total. Keep each pool small and
+    // let idle connections go quickly so many instances do not exhaust the limit.
+    const max = Number(process.env.DATABASE_POOL_MAX ?? 2);
+    super({
+      adapter: new PrismaPg({
+        connectionString,
+        max: Number.isInteger(max) && max > 0 ? max : 2,
+        idleTimeoutMillis: 5_000,
+        connectionTimeoutMillis: 10_000,
+      }),
+    });
   }
 
   async onModuleDestroy(): Promise<void> {
