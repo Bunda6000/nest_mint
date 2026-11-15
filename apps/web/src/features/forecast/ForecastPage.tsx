@@ -44,7 +44,7 @@ export function ForecastPage() {
     })) ?? [];
 
   return (
-    <section className="mx-auto max-w-md p-4">
+    <section className="mx-auto max-w-md md:max-w-3xl p-4">
       <Link to="/" className="text-emerald-700 underline">
         ← Home
       </Link>

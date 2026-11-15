@@ -71,7 +71,7 @@ export function ChartsSection({ month, currency }: Props) {
     );
   }
   return (
-    <div className="mt-6 space-y-4">
+    <div className="mt-6 grid gap-4 xl:grid-cols-2">
       <Card title="Spending by group">
         <CategoryDonut categories={load.breakdown.categories} currency={currency} month={month} />
       </Card>

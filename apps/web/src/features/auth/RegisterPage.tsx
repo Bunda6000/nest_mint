@@ -45,7 +45,7 @@ export function RegisterPage() {
 
   if (created) {
     return (
-      <section className="mx-auto max-w-sm p-6" aria-live="polite">
+      <section className="mx-auto max-w-sm p-6 md:mt-20" aria-live="polite">
         <h1 className="text-2xl font-semibold">Account created</h1>
         <p className="mt-2 text-gray-600">
           Welcome{created.displayName ? `, ${created.displayName}` : ''}. You can now log in with{' '}
@@ -62,7 +62,7 @@ export function RegisterPage() {
   }
 
   return (
-    <section className="mx-auto max-w-sm p-6">
+    <section className="mx-auto max-w-sm p-6 md:mt-20">
       <h1 className="text-2xl font-semibold">Create your account</h1>
       <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         {errors.form && (

@@ -30,7 +30,7 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <section className="mx-auto max-w-sm p-6">
+    <section className="mx-auto max-w-sm p-6 md:mt-20">
       <h1 className="text-2xl font-semibold">{t('auth.resetTitle')}</h1>
       {done ? (
         <p className="mt-6 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">

@@ -3,7 +3,6 @@ import type { MonthSummaryResponse } from '@nestmint/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { formatRate } from '../../format';
-import { LanguageSwitch } from '../../i18n/LanguageSwitch';
 import { useT } from '../../i18n/translate';
 import { useAuth } from '../auth/AuthContext';
 import { ChartsSection } from '../charts/ChartsSection';
@@ -33,7 +32,7 @@ const hasData = (summary: MonthlySummary) => summary.income > 0 || summary.expen
 const CURRENCIES: Currency[] = ['EUR', 'MKD'];
 
 export function HomePage() {
-  const { state, logout, authedGet } = useAuth();
+  const { state, authedGet } = useAuth();
   const { t } = useT();
   const name = state.status === 'authenticated' ? (state.user.displayName ?? state.user.email) : '';
 
@@ -76,21 +75,11 @@ export function HomePage() {
       : null;
 
   return (
-    <section className="mx-auto max-w-md p-6">
+    <section className="mx-auto max-w-md p-4 md:max-w-3xl md:p-6 xl:max-w-5xl">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">NestMint</h1>
           <p className="mt-1 text-sm text-gray-500">{t('home.hello', { name })}</p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
-          >
-            {t('common.logOut')}
-          </button>
-          <LanguageSwitch />
         </div>
       </header>
 
@@ -161,7 +150,7 @@ export function HomePage() {
 
       {load.status === 'ready' && (
         <>
-          <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <KpiCard
               label={t('home.income')}
               value={formatAmount(load.current.income, currency, month)}
@@ -213,35 +202,6 @@ export function HomePage() {
       >
         {t('home.addExpense')}
       </Link>
-      <nav className="mt-4 flex gap-4">
-        <Link to="/transactions" className="text-emerald-700 underline">
-          {t('nav.expenses')}
-        </Link>
-        <Link to="/income" className="text-emerald-700 underline">
-          {t('nav.income')}
-        </Link>
-        <Link to="/bills" className="text-emerald-700 underline">
-          {t('nav.bills')}
-        </Link>
-        <Link to="/budget" className="text-emerald-700 underline">
-          {t('nav.budget')}
-        </Link>
-        <Link to="/categories" className="text-emerald-700 underline">
-          {t('nav.categories')}
-        </Link>
-        <Link to="/forecast" className="text-emerald-700 underline">
-          {t('nav.forecast')}
-        </Link>
-        <Link to="/goals" className="text-emerald-700 underline">
-          {t('nav.goals')}
-        </Link>
-        <Link to="/import" className="text-emerald-700 underline">
-          {t('nav.import')}
-        </Link>
-        <Link to="/settings" className="text-emerald-700 underline">
-          {t('nav.settings')}
-        </Link>
-      </nav>
     </section>
   );
 }

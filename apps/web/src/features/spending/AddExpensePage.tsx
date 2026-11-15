@@ -65,7 +65,7 @@ export function AddExpensePage() {
   }
 
   return (
-    <section className="mx-auto max-w-md p-6">
+    <section className="mx-auto max-w-md p-4 md:p-6">
       <div className="flex items-center justify-between">
         <Link to="/" className="text-sm text-emerald-700 underline">
           ← Back

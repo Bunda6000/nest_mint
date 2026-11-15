@@ -1,6 +1,7 @@
 import type { ExchangeRatesResponse } from '@nestmint/shared';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Navigate } from 'react-router';
+import { AppShell } from '../../components/AppShell';
 import { setRates } from '../../rates';
 import { useAuth } from './AuthContext';
 
@@ -34,5 +35,5 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
   if (state.status === 'anonymous') return <Navigate to="/login" replace />;
-  return children;
+  return <AppShell>{children}</AppShell>;
 }

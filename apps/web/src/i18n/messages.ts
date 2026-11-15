@@ -50,6 +50,10 @@ export const en = {
   'auth.somethingWrong': 'Something went wrong. Please try again.',
   'nav.goals': 'Goals',
   'nav.forecast': 'Forecast',
+  'nav.home': 'Dashboard',
+  'nav.menu': 'Menu',
+  'nav.closeMenu': 'Close',
+  'nav.main': 'Main menu',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -81,6 +85,10 @@ export const mk: Partial<Record<MessageKey, string>> = {
   'nav.settings': 'Поставки',
   'category.allCategories': 'Сите категории',
   'category.archivedSuffix': '(архивирана)',
+  'nav.home': 'Табла',
+  'nav.menu': 'Мени',
+  'nav.closeMenu': 'Затвори',
+  'nav.main': 'Главно мени',
   'auth.logIn': 'Најави се',
   'auth.loggingIn': 'Се најавувам…',
   'auth.email': 'Е-пошта',

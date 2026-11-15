@@ -50,7 +50,7 @@ export function GoalsPage() {
   const goals = load.status === 'ready' ? load.data.goals : [];
 
   return (
-    <section className="mx-auto max-w-md p-4">
+    <section className="mx-auto max-w-md md:max-w-3xl p-4">
       <Link to="/" className="text-emerald-700 underline">
         ← Home
       </Link>

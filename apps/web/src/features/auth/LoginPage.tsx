@@ -41,7 +41,7 @@ export function LoginPage() {
   }
 
   return (
-    <section className="mx-auto max-w-sm p-6">
+    <section className="mx-auto max-w-sm p-6 md:mt-20">
       <h1 className="text-2xl font-semibold">{t('auth.logIn')}</h1>
       <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         {errors.form && (

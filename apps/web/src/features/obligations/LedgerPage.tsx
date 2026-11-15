@@ -35,7 +35,7 @@ export function LedgerPage() {
   const today = localDay();
 
   return (
-    <section className="mx-auto max-w-md p-6">
+    <section className="mx-auto max-w-md md:max-w-3xl p-6">
       <Link to="/obligations" className="text-sm text-emerald-700 underline">
         ← Recurring bills
       </Link>

@@ -111,7 +111,7 @@ export function CategoriesPage() {
   };
 
   return (
-    <section className="mx-auto max-w-md p-6">
+    <section className="mx-auto max-w-md md:max-w-3xl p-6">
       <Link to="/" className="text-sm text-emerald-700 underline">
         ← Back
       </Link>
