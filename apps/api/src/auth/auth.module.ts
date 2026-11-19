@@ -11,6 +11,7 @@ import { LoginRateLimiter } from './login-rate-limiter.js';
 import { MeController } from './me.controller.js';
 import { OriginGuard } from './origin.guard.js';
 import { EMAIL_SENDER, LogEmailSender } from './email-sender.js';
+import { HttpEmailSender } from './http-email-sender.js';
 import { PasswordHasher } from './password-hasher.js';
 import { PASSWORD_RESET_TOKENS_REPOSITORY } from './password-reset-tokens.repository.js';
 import { PasswordResetService } from './password-reset.service.js';
@@ -27,7 +28,15 @@ import { SessionService } from './session.service.js';
     { provide: AuthConfig, useFactory: () => loadAuthConfig() },
     { provide: REFRESH_TOKENS_REPOSITORY, useClass: PrismaRefreshTokensRepository },
     { provide: PASSWORD_RESET_TOKENS_REPOSITORY, useClass: PrismaPasswordResetTokensRepository },
-    { provide: EMAIL_SENDER, useClass: LogEmailSender },
+    {
+      provide: EMAIL_SENDER,
+      // Real mail when MAIL_API_URL and MAIL_API_TOKEN are set; otherwise the log stand-in.
+      useFactory: () => {
+        const url = process.env.MAIL_API_URL;
+        const token = process.env.MAIL_API_TOKEN;
+        return url && token ? new HttpEmailSender({ url, token }) : new LogEmailSender();
+      },
+    },
     PasswordResetService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     AccessTokenService,
